@@ -2,12 +2,24 @@
 'use client';
 
 import { useState } from 'react';
-import { useGameState } from '../../hooks/useGameState';
+import { useRouter } from 'next/navigation'; // NEW
+import { useGameState } from '../../hooks/useGameState'; // Path adjusted for new folder
 
-// --- Types & Random Emojis ---
+// --- Types ---
 type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
+
+// NEW: The shape of our saved history
+type MatchRecord = {
+  matchId: string;
+  date: string;
+  gameName: string;
+  winnerId: string | null;
+  finalScores: Record<string, number>;
+  activePlayerIds: string[]; 
+  savedRounds: Round[]; 
+};
 
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙'];
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
@@ -21,6 +33,54 @@ export default function CustomTracker() {
   // Numpad State
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
+
+  // --- New State ---
+  const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
+  const [gameName, setGameName] = useState('Custom Game');
+  const router = useRouter(); // Allows us to change pages via code
+
+  // ... (Keep your existing addPlayer, addRound, calculateTotal, etc. here) ...
+
+  // NEW: The Save Function
+  const finishGame = () => {
+    if (players.length === 0 || rounds.length === 0) return;
+
+    // 1. Calculate final scores for everyone
+    const finalScores: Record<string, number> = {};
+    players.forEach(p => {
+      finalScores[p.id] = calculateTotal(p.id);
+    });
+
+    // 2. Determine the winner (Highest Score wins for now)
+    let winnerId: string | null = null;
+    let highestScore = -Infinity;
+    
+    Object.entries(finalScores).forEach(([playerId, score]) => {
+      if (score > highestScore) {
+        highestScore = score;
+        winnerId = playerId;
+      }
+    });
+
+    // 3. Create the Match Record
+    const newMatch: MatchRecord = {
+      matchId: Date.now().toString(),
+      date: new Date().toLocaleDateString(),
+      gameName: gameName,
+      winnerId: winnerId,
+      finalScores: finalScores,
+      activePlayerIds: players.map(p => p.id), // Save exactly who was playing
+      savedRounds: [...rounds], // Save the exact grid
+    };
+
+    // 4. Save to Vault, Reset the Board, and Navigate
+    setMatchHistory([newMatch, ...matchHistory]); 
+    setRounds([{ roundId: 1, scores: {} }]); 
+    setGameName('Custom Game'); // Reset name for next time
+    
+    // Instantly jump to the History tab!
+    router.push('/history'); 
+  };
 
   // --- Logic Functions ---
   const addPlayer = () => {
@@ -79,83 +139,45 @@ export default function CustomTracker() {
     setActiveCell(null); // Close keypad
   };
 
-  return (
+    return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-32">
       
-      {/* HEADER: Add Player */}
+      {/* HEADER: Game Name & Add Player */}
       <div className="p-4 bg-white shadow-sm border-b">
-        <h1 className="text-xl font-bold mb-4">Custom Game</h1>
+        {/* Game Name Input */}
+        <input 
+          type="text" 
+          value={gameName}
+          onChange={(e) => setGameName(e.target.value)}
+          className="text-2xl font-black text-slate-800 border-b-2 border-transparent focus:border-blue-500 focus:outline-none w-full mb-4 bg-transparent placeholder-slate-300 transition-colors"
+          placeholder="What are we playing?"
+        />
+        
         <div className="flex gap-2">
           <input 
             type="text" 
             placeholder="Add player..." 
-            className="border p-2 rounded flex-grow"
+            className="border border-slate-200 p-2 rounded-lg flex-grow shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={newPlayerName}
             onChange={(e) => setNewPlayerName(e.target.value)}
           />
-          <button onClick={addPlayer} className="bg-blue-600 text-white px-4 py-2 rounded font-semibold">
+          <button onClick={addPlayer} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold shadow-sm active:bg-blue-700">
             + Add
           </button>
         </div>
       </div>
 
-      {/* MATRIX GRID */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-center border-collapse">
-          {/* Sticky Roster Header */}
-          <thead className="bg-slate-100 sticky top-0 border-b">
-            <tr>
-              <th className="p-3 w-16 text-slate-500 font-normal">Rnd</th>
-              {players.map(p => (
-                <th key={p.id} className="p-3 font-semibold min-w-[80px]">
-                  <div className="text-2xl">{p.emoji}</div>
-                  <div className="text-sm truncate">{p.name}</div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          
-          {/* Rounds */}
-          <tbody>
-            {rounds.map(round => (
-              <tr key={round.roundId} className="border-b bg-white">
-                <td className="p-3 text-slate-400 border-r">{round.roundId}</td>
-                {players.map(p => {
-                  const score = round.scores[p.id];
-                  const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
-                  
-                  return (
-                    <td 
-                      key={p.id} 
-                      onClick={() => handleCellTap(round.roundId, p.id)}
-                      className={`p-3 text-lg cursor-pointer ${isSelected ? 'bg-blue-100 border-2 border-blue-500 rounded' : ''}`}
-                    >
-                      {score !== undefined ? score : <span className="text-slate-300">-</span>}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-          
-          {/* Sticky Totals Footer */}
-          <tfoot className="bg-slate-800 text-white sticky bottom-0">
-            <tr>
-              <td className="p-4 font-bold border-r border-slate-700">Tot</td>
-              {players.map(p => (
-                <td key={p.id} className="p-4 font-bold text-xl">
-                  {calculateTotal(p.id)}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+      {/* ... (Keep your existing MATRIX GRID code exactly the same here) ... */}
 
-      {/* Add Round Button */}
-      <div className="p-4 text-center">
-         <button onClick={addRound} className="bg-slate-200 text-slate-800 px-6 py-3 rounded-full font-bold shadow-sm w-full max-w-sm active:bg-slate-300">
-           + Next Round
+      {/* FOOTER ACTION BUTTONS */}
+      <div className="p-4 text-center flex flex-col gap-3">
+         <button onClick={addRound} className="bg-white border-2 border-slate-200 text-slate-800 px-6 py-3 rounded-xl font-bold shadow-sm w-full max-w-sm active:bg-slate-50 mx-auto">
+           + Add Round
+         </button>
+         
+         {/* THE NEW FINISH BUTTON */}
+         <button onClick={finishGame} className="bg-slate-900 text-white px-6 py-4 rounded-xl font-bold shadow-md w-full max-w-sm active:bg-slate-800 mx-auto mt-4 flex items-center justify-center gap-2">
+           <span>🏆</span> Finish & Save Game
          </button>
       </div>
 
