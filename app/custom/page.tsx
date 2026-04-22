@@ -10,14 +10,20 @@ type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 
+// ✅ NEW: Snapshot type for preserving per-match roster display
+type PlayerSnapshot = { id: string; name: string; emoji: string };
+
 type MatchRecord = {
   matchId: string;
   date: string;
   gameName: string;
   winnerId: string | null;
   finalScores: Record<string, number>;
-  activePlayerIds: string[]; 
-  savedRounds: Round[]; 
+  activePlayerIds: string[];
+  savedRounds: Round[];
+
+  // ✅ NEW: Snapshot roster at time of saving
+  playerSnapshots: PlayerSnapshot[];
 };
 
 // --- Helpers ---
@@ -30,10 +36,13 @@ export default function CustomTracker() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  
+
   const [newPlayerName, setNewPlayerName] = useState('');
-  const [gameName, setGameName] = useState('Custom Game');
-  
+  const [gameName, setGameName] = useGameState<string>(
+  'scorekeeper_gameName',
+  'Custom Game'
+);
+
   // UI State
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
@@ -58,15 +67,15 @@ export default function CustomTracker() {
   };
 
   const randomizeEmoji = (playerId: string) => {
-    setPlayers(players.map(p => 
-      p.id === playerId ? { ...p, emoji: getRandomEmoji() } : p
-    ));
+    setPlayers(
+      players.map(p => (p.id === playerId ? { ...p, emoji: getRandomEmoji() } : p))
+    );
   };
 
   const addRound = () => {
     const nextRoundId = rounds.length > 0 ? rounds[rounds.length - 1].roundId + 1 : 1;
     setRounds([...rounds, { roundId: nextRoundId, scores: {} }]);
-    setViewMode('GRID'); 
+    setViewMode('GRID');
   };
 
   const removeRound = (roundIdToRemove: number) => {
@@ -87,8 +96,12 @@ export default function CustomTracker() {
 
   const saveGame = () => {
     if (players.length === 0 || rounds.length === 0) return;
+
     const finalScores: Record<string, number> = {};
-    players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
+    players.forEach(p => {
+      finalScores[p.id] = calculateTotal(p.id);
+    });
+
     let winnerId: string | null = null;
     let highestScore = -Infinity;
     Object.entries(finalScores).forEach(([playerId, score]) => {
@@ -97,20 +110,32 @@ export default function CustomTracker() {
         winnerId = playerId;
       }
     });
+
+    // ✅ NEW: snapshot players at time of save
+    const playerSnapshots: PlayerSnapshot[] = players.map(p => ({
+      id: p.id,
+      name: p.name,
+      emoji: p.emoji,
+    }));
+
     const newMatch: MatchRecord = {
       matchId: Date.now().toString(),
       date: new Date().toLocaleDateString(),
       gameName: gameName,
       winnerId: winnerId,
       finalScores: finalScores,
-      activePlayerIds: players.map(p => p.id), 
-      savedRounds: [...rounds], 
+      activePlayerIds: players.map(p => p.id),
+      savedRounds: [...rounds],
+
+      // ✅ NEW FIELD
+      playerSnapshots,
     };
-    setMatchHistory([newMatch, ...matchHistory]); 
-    setRounds([{ roundId: 1, scores: {} }]); 
+
+    setMatchHistory([newMatch, ...matchHistory]);
+    setRounds([{ roundId: 1, scores: {} }]);
     setGameName('Custom Game');
     setViewMode('SETUP');
-    router.push('/history'); 
+    router.push('/history');
   };
 
   // --- Numpad Logic ---
@@ -126,20 +151,22 @@ export default function CustomTracker() {
   };
 
   const toggleNegative = () => {
-    setInputValue(prev => prev.startsWith('-') ? prev.substring(1) : '-' + prev);
+    setInputValue(prev => (prev.startsWith('-') ? prev.substring(1) : '-' + prev));
   };
 
   const submitScore = () => {
     if (!activeCell) return;
     const numericScore = parseInt(inputValue, 10) || 0;
+
     const updatedRounds = rounds.map(round => {
       if (round.roundId === activeCell.roundId) {
         return { ...round, scores: { ...round.scores, [activeCell.playerId]: numericScore } };
       }
       return round;
     });
+
     setRounds(updatedRounds);
-    setActiveCell(null); 
+    setActiveCell(null);
   };
 
   const switchTab = (tab: 'SETUP' | 'GRID' | 'GRAPH') => {
@@ -149,9 +176,9 @@ export default function CustomTracker() {
 
   // --- View Renderers ---
   const renderLiveGraph = () => {
-    if (players.length === 0) return (
-      <div className="p-10 text-center text-slate-400 font-semibold mt-10">Add players in Setup!</div>
-    );
+    if (players.length === 0)
+      return <div className="p-10 text-center text-slate-400 font-semibold mt-10">Add players in Setup!</div>;
+
     const chartData = players.map((p, index) => {
       let runningTotal = 0;
       const points = rounds.map(r => {
@@ -160,82 +187,157 @@ export default function CustomTracker() {
       });
       return { id: p.id, emoji: p.emoji, color: LINE_COLORS[index % LINE_COLORS.length], points: [0, ...points] };
     });
+
     const allScores = chartData.flatMap(d => d.points);
     const maxScore = Math.max(...allScores, 10);
     const minScore = Math.min(...allScores, 0);
     const range = maxScore - minScore || 1;
     const totalRounds = rounds.length;
+
     const width = 400;
     const height = 200;
+
     return (
       <div className="p-4 animate-in fade-in slide-in-from-right-2">
-         <div className="flex flex-wrap gap-3 mb-4 text-sm font-semibold justify-center bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-           {chartData.map(d => (
-             <div key={d.id} className="flex items-center gap-1.5">
-               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></div>
-               <span>{d.emoji}</span>
-             </div>
-           ))}
-         </div>
-         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-           <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-             {minScore < 0 && (
-               <line x1="0" y1={height - ((0 - minScore) / range) * height} x2={width} y2={height - ((0 - minScore) / range) * height} stroke="#cbd5e1" strokeDasharray="4" strokeWidth="1" />
-             )}
-             {chartData.map(d => {
-               const polylinePoints = d.points.map((score, roundIndex) => {
-                 const x = (roundIndex / totalRounds) * width;
-                 const y = height - ((score - minScore) / range) * height;
-                 return `${x},${y}`;
-               }).join(' ');
-               return <polyline key={d.id} points={polylinePoints} fill="none" stroke={d.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-md transition-all duration-300" />;
-             })}
-           </svg>
-           <div className="flex justify-between mt-4 text-xs text-slate-400 font-bold">
-             <span>Start</span>
-             <span>Round {totalRounds}</span>
-           </div>
-         </div>
+        <div className="flex flex-wrap gap-3 mb-4 text-sm font-semibold justify-center bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+          {chartData.map(d => (
+            <div key={d.id} className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }}></div>
+              <span>{d.emoji}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+            {minScore < 0 && (
+              <line
+                x1="0"
+                y1={height - ((0 - minScore) / range) * height}
+                x2={width}
+                y2={height - ((0 - minScore) / range) * height}
+                stroke="#cbd5e1"
+                strokeDasharray="4"
+                strokeWidth="1"
+              />
+            )}
+
+            {chartData.map(d => {
+              const polylinePoints = d.points
+                .map((score, roundIndex) => {
+                  const x = (roundIndex / totalRounds) * width;
+                  const y = height - ((score - minScore) / range) * height;
+                  return `${x},${y}`;
+                })
+                .join(' ');
+
+              return (
+                <polyline
+                  key={d.id}
+                  points={polylinePoints}
+                  fill="none"
+                  stroke={d.color}
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="drop-shadow-md transition-all duration-300"
+                />
+              );
+            })}
+          </svg>
+
+          <div className="flex justify-between mt-4 text-xs text-slate-400 font-bold">
+            <span>Start</span>
+            <span>Round {totalRounds}</span>
+          </div>
+        </div>
       </div>
     );
   };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 pb-32">
-      
       {/* --- SETUP VIEW --- */}
       {viewMode === 'SETUP' && (
         <div className="animate-in fade-in slide-in-from-bottom-2">
           {/* SETUP HEADER (FIXED) */}
-          <div className="fixed top-0 left-0 right-0 p-4 bg-white shadow-sm border-b z-30 flex items-center">
-            <button onClick={() => switchTab('GRID')} className="text-blue-600 font-bold px-2 py-2 flex items-center gap-1 -ml-2">
-              <span className="text-2xl leading-none pb-0.5">‹</span> Back
-            </button>
-            <h1 className="text-xl font-black text-slate-800 absolute left-1/2 -translate-x-1/2">Game Setup</h1>
+          <div className="fixed top-0 left-0 right-0 p-4 bg-white shadow-sm border-b z-30">
+            <div className="relative flex items-center justify-center">
+              {/* Left spacer keeps the title visually centered */}
+              <div className="w-10 h-10" />
+
+              <h1 className="text-xl font-black text-slate-800">Game Setup</h1>
+
+              {/* ✅ Rocket Back button (always goes to GRID) */}
+              <button
+                onClick={() => switchTab('GRID')}
+                aria-label="Back to score grid"
+                className="absolute right-0 w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center text-xl hover:bg-slate-200 active:scale-95 transition"
+              >
+                🚀
+              </button>
+            </div>
           </div>
 
           <div className="p-6 pt-[88px]">
             <div className="mb-8">
               <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Game Title</h2>
-              <input type="text" value={gameName} onChange={(e) => setGameName(e.target.value)} className="text-2xl font-black text-slate-800 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none w-full p-4 bg-white shadow-sm" placeholder="What are we playing?" />
+              <input
+                type="text"
+                value={gameName}
+                onChange={e => setGameName(e.target.value)}
+                className="text-2xl font-black text-slate-800 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:outline-none w-full p-4 bg-white shadow-sm"
+                placeholder="What are we playing?"
+              />
             </div>
 
             <div>
               <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">Active Roster</h2>
+
               <div className="flex gap-2 mb-4">
-                <input type="text" placeholder="New player name..." className="border-2 border-slate-200 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} />
-                <button onClick={addPlayer} className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold active:bg-slate-900">+ Add</button>
+                <input
+                  type="text"
+                  placeholder="New player name..."
+                  className="border-2 border-slate-200 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500"
+                  value={newPlayerName}
+                  onChange={e => setNewPlayerName(e.target.value)}
+                />
+                <button
+                  onClick={addPlayer}
+                  className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold active:bg-slate-900"
+                >
+                  + Add
+                </button>
               </div>
+
               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                {players.length === 0 ? <div className="p-6 text-center text-slate-400">No players added.</div> : players.map((p, i) => (
-                  <div key={p.id} className={`flex items-center justify-between p-4 ${i !== players.length - 1 ? 'border-b border-slate-100' : ''}`}>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => randomizeEmoji(p.id)} className="w-12 h-12 bg-slate-100 rounded-full text-2xl flex items-center justify-center hover:bg-slate-200">{p.emoji}</button>
-                      <span className="font-bold text-lg text-slate-700">{p.name}</span>
+                {players.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400">No players added.</div>
+                ) : (
+                  players.map((p, i) => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center justify-between p-4 ${i !== players.length - 1 ? 'border-b border-slate-100' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => randomizeEmoji(p.id)}
+                          className="w-12 h-12 bg-slate-100 rounded-full text-2xl flex items-center justify-center hover:bg-slate-200 active:scale-95 transition"
+                        >
+                          {p.emoji}
+                        </button>
+                        <span className="font-bold text-lg text-slate-700">{p.name}</span>
+                      </div>
+
+                      <button
+                        onClick={() => removePlayer(p.id)}
+                        className="w-10 h-10 text-slate-300 hover:text-red-500 active:scale-95 transition text-xl"
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <button onClick={() => removePlayer(p.id)} className="w-10 h-10 text-slate-300 hover:text-red-500 text-xl">✕</button>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -249,11 +351,33 @@ export default function CustomTracker() {
           <div className="fixed top-0 left-0 right-0 p-4 bg-white shadow-sm border-b z-30">
             <div className="flex justify-between items-center mb-4">
               <h1 className="text-2xl font-black text-slate-800 truncate pr-4">{gameName}</h1>
-              <button onClick={() => switchTab('SETUP')} className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center text-xl">⚙️</button>
+
+              {/* ⚙️ stays on grid/graph views */}
+              <button
+                onClick={() => switchTab('SETUP')}
+                className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center text-xl hover:bg-slate-200 active:scale-95 transition"
+              >
+                ⚙️
+              </button>
             </div>
+
             <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button onClick={() => switchTab('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>🧮 Score Grid</button>
-              <button onClick={() => switchTab('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>📈 Live Graph</button>
+              <button
+                onClick={() => switchTab('GRID')}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                  viewMode === 'GRID' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                🧮 Score Grid
+              </button>
+              <button
+                onClick={() => switchTab('GRAPH')}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                  viewMode === 'GRAPH' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                📈 Live Graph
+              </button>
             </div>
           </div>
 
@@ -261,7 +385,9 @@ export default function CustomTracker() {
           <div className="pt-[124px]">
             {viewMode === 'GRID' && (
               <div className="overflow-x-auto animate-in fade-in">
-                {players.length === 0 ? <div className="p-10 text-center text-slate-400">Tap ⚙️ to add players!</div> : (
+                {players.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400">Tap ⚙️ to add players!</div>
+                ) : (
                   <table className="w-full text-center border-collapse">
                     {/* TABLE HEADER: Sticks precisely to the bottom of the fixed header */}
                     <thead className="bg-slate-100 sticky top-[124px] border-b z-20 shadow-sm">
@@ -275,20 +401,37 @@ export default function CustomTracker() {
                         ))}
                       </tr>
                     </thead>
+
                     <tbody>
                       {rounds.map(round => (
                         <tr key={round.roundId} className="border-b bg-white">
                           <td className="p-2 border-r align-middle bg-slate-50">
                             <div className="flex items-center justify-between px-1">
                               <span className="text-slate-500 font-bold">{round.roundId}</span>
-                              <button onClick={(e) => { e.stopPropagation(); removeRound(round.roundId); }} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors">✕</button>
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  removeRound(round.roundId);
+                                }}
+                                className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 active:scale-95 transition"
+                              >
+                                ✕
+                              </button>
                             </div>
                           </td>
+
                           {players.map(p => {
                             const score = round.scores[p.id];
                             const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
+
                             return (
-                              <td key={p.id} onClick={() => handleCellTap(round.roundId, p.id)} className={`p-3 text-lg cursor-pointer ${isSelected ? 'bg-blue-100 border-2 border-blue-500 rounded' : 'active:bg-slate-50'}`}>
+                              <td
+                                key={p.id}
+                                onClick={() => handleCellTap(round.roundId, p.id)}
+                                className={`p-3 text-lg cursor-pointer ${
+                                  isSelected ? 'bg-blue-100 border-2 border-blue-500 rounded' : 'active:bg-slate-50'
+                                }`}
+                              >
                                 {score !== undefined ? score : <span className="text-slate-300">-</span>}
                               </td>
                             );
@@ -296,10 +439,15 @@ export default function CustomTracker() {
                         </tr>
                       ))}
                     </tbody>
+
                     <tfoot className="bg-slate-800 text-white sticky bottom-0 z-10">
                       <tr>
                         <td className="p-4 font-bold border-r border-slate-700">Tot</td>
-                        {players.map(p => <td key={p.id} className="p-4 font-bold text-xl">{calculateTotal(p.id)}</td>)}
+                        {players.map(p => (
+                          <td key={p.id} className="p-4 font-bold text-xl">
+                            {calculateTotal(p.id)}
+                          </td>
+                        ))}
                       </tr>
                     </tfoot>
                   </table>
@@ -311,14 +459,21 @@ export default function CustomTracker() {
 
             {viewMode === 'GRID' && (
               <div className="p-5 text-center flex flex-col gap-3 max-w-md mx-auto mt-4">
-                 {players.length > 0 && (
-                   <button onClick={addRound} className="bg-white border-2 border-slate-200 text-slate-800 px-6 py-3.5 rounded-xl font-bold active:bg-slate-50 transition-colors">
-                     + Add Round
-                   </button>
-                 )}
-                 <button onClick={saveGame} className="bg-slate-900 text-white px-6 py-4 rounded-xl font-bold active:bg-slate-800 flex items-center justify-center gap-2">
-                   <span>💾</span> Save to History
-                 </button>
+                {players.length > 0 && (
+                  <button
+                    onClick={addRound}
+                    className="bg-white border-2 border-slate-200 text-slate-800 px-6 py-3.5 rounded-xl font-bold active:bg-slate-50 transition-colors"
+                  >
+                    + Add Round
+                  </button>
+                )}
+
+                <button
+                  onClick={saveGame}
+                  className="bg-slate-900 text-white px-6 py-4 rounded-xl font-bold active:bg-slate-800 flex items-center justify-center gap-2"
+                >
+                  <span>💾</span> Save to History
+                </button>
               </div>
             )}
           </div>
@@ -328,17 +483,45 @@ export default function CustomTracker() {
       {/* NUMPAD */}
       {activeCell && viewMode === 'GRID' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.1)] border-t-2 border-slate-100 rounded-t-3xl p-5 pb-8 z-50">
-          <div className="text-center text-5xl font-black mb-5 bg-slate-50 py-4 rounded-2xl border border-slate-100 shadow-inner">{inputValue}</div>
-          <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => <button key={num} onClick={() => handleNumpadInput(num.toString())} className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200">{num}</button>)}
-            <button onClick={toggleNegative} className="bg-slate-200 py-5 rounded-2xl text-xl font-bold">+/-</button>
-            <button onClick={() => handleNumpadInput('0')} className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold">0</button>
-            <button onClick={() => setInputValue(prev => prev.slice(0, -1) || '0')} className="bg-red-50 text-red-500 py-5 rounded-2xl text-2xl font-bold">⌫</button>
+          <div className="text-center text-5xl font-black mb-5 bg-slate-50 py-4 rounded-2xl border border-slate-100 shadow-inner">
+            {inputValue}
           </div>
-          <button onClick={submitScore} className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700">Enter Score</button>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+              <button
+                key={num}
+                onClick={() => handleNumpadInput(num.toString())}
+                className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200"
+              >
+                {num}
+              </button>
+            ))}
+
+            <button onClick={toggleNegative} className="bg-slate-200 py-5 rounded-2xl text-xl font-bold">
+              +/-
+            </button>
+
+            <button onClick={() => handleNumpadInput('0')} className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold">
+              0
+            </button>
+
+            <button
+              onClick={() => setInputValue(prev => prev.slice(0, -1) || '0')}
+              className="bg-red-50 text-red-500 py-5 rounded-2xl text-2xl font-bold active:scale-95 transition"
+            >
+              ⌫
+            </button>
+          </div>
+
+          <button
+            onClick={submitScore}
+            className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700"
+          >
+            Enter Score
+          </button>
         </div>
       )}
-      
     </main>
   );
 }
