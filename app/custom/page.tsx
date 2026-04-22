@@ -1,7 +1,7 @@
 // app/custom/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
 
@@ -46,7 +46,24 @@ export default function CustomTracker() {
   // UI State
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
-  const [viewMode, setViewMode] = useState<'SETUP' | 'GRID' | 'GRAPH'>(players.length === 0 ? 'SETUP' : 'GRID');
+  const [viewMode, setViewMode] =
+    useState<'SETUP' | 'GRID' | 'GRAPH'>(
+      players.length === 0 ? 'SETUP' : 'GRID'
+    );
+
+    useEffect(() => {
+      const hasScores = rounds.some(r =>
+        Object.values(r.scores || {}).some(v => (v ?? 0) !== 0)
+      );
+
+      if (players.length === 0) {
+        setViewMode('SETUP');
+      } else if (rounds.length > 1 || hasScores) {
+        // ✅ resume or active game → GRID
+        setViewMode('GRID');
+      }
+      // ✅ otherwise: stay in SETUP while adding players
+    }, [players.length, rounds]);
 
   const router = useRouter();
 
