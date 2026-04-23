@@ -490,66 +490,70 @@ export default function CustomTracker() {
               <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
             </div>
 
-            {viewMode === 'GRID' && (
-              <div className="animate-in fade-in overflow-x-auto pb-4">
-                <table className="w-full text-center border-collapse">
-                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-30 shadow-sm rounded-t-xl">
-                    <tr>
-                      <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal bg-slate-100 dark:bg-slate-800 rounded-tl-xl">Rnd</th>
-                      {players.map((p, i) => (
-                        <th key={p.id} className={`p-3 font-semibold min-w-[80px] bg-slate-100 dark:bg-slate-800 ${i === players.length - 1 ? 'rounded-tr-xl' : ''}`}>
-                          <div className="text-2xl bg-white dark:bg-slate-700/50 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
-                          <div className="text-xs truncate font-bold text-slate-400 dark:text-slate-300 uppercase">{p.name}</div>
-                        </th>
+{viewMode === 'GRID' && (
+              <div className="animate-in fade-in pb-4">
+                
+                {/* ISOLATED SCROLL CONTAINER FOR TABLE ONLY */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
+                  <table className="w-full text-center border-collapse">
+                    <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-30 shadow-sm">
+                      <tr>
+                        <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal bg-slate-100 dark:bg-slate-800">Rnd</th>
+                        {players.map((p) => (
+                          <th key={p.id} className="p-3 font-semibold min-w-[80px] bg-slate-100 dark:bg-slate-800">
+                            <div className="text-2xl bg-white dark:bg-slate-700/50 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
+                            <div className="text-xs truncate font-bold text-slate-400 dark:text-slate-300 uppercase">{p.name}</div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rounds.map(round => (
+                        <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
+                          <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50">
+                            <div className="flex items-center justify-between px-1">
+                              <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
+                              <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
+                            </div>
+                          </td>
+                          {players.map(p => {
+                            const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
+                            return (
+                              <td 
+                                key={p.id} 
+                                onClick={() => handleCellTap(round.roundId, p.id)} 
+                                className={`p-4 text-xl font-medium border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
+                              >
+                                {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
                       ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rounds.map(round => (
-                      <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50">
-                          <div className="flex items-center justify-between px-1">
-                            <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
-                            <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
-                          </div>
-                        </td>
-                        {players.map(p => {
-                          const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
+                    </tbody>
+                    <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] border-t dark:border-slate-700">
+                      <tr>
+                        <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50">Tot</td>
+                        {players.map((p) => {
+                          const total = calculateTotal(p.id);
+                          let isWinner = false;
+                          if (settings.target > 0) {
+                            if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
+                            if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
+                          }
                           return (
-                            <td 
-                              key={p.id} 
-                              onClick={() => handleCellTap(round.roundId, p.id)} 
-                              className={`p-4 text-xl font-medium border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
-                            >
-                              {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
+                            <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
+                              {total}
                             </td>
                           );
                         })}
                       </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] rounded-b-xl border-t dark:border-slate-700">
-                    <tr>
-                      <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 rounded-bl-xl">Tot</td>
-                      {players.map((p, i) => {
-                        const total = calculateTotal(p.id);
-                        let isWinner = false;
-                        if (settings.target > 0) {
-                          if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
-                          if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
-                        }
-                        return (
-                          <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''} ${i === players.length - 1 ? 'rounded-br-xl' : ''}`}>
-                            {total}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </tfoot>
-                </table>
+                    </tfoot>
+                  </table>
+                </div>
                 
-                {/* DYNAMIC POST-GAME BUTTONS */}
-                <div className="flex flex-row gap-3 mt-6">
+                {/* DYNAMIC POST-GAME BUTTONS (FIXED OUTSIDE TABLE) */}
+                <div className="flex flex-row gap-3">
                   {isGameOver ? (
                     <button 
                       onClick={handleStartNewGame} 
@@ -571,7 +575,7 @@ export default function CustomTracker() {
                   </button>
                 </div>
               </div>
-            )}
+            )}            
             
             {viewMode === 'GRAPH' && (
               <div className="animate-in fade-in">

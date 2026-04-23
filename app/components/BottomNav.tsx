@@ -19,7 +19,6 @@ export default function BottomNav() {
     { name: 'Players', path: '/roster', icon: '👥', isResume: false },
   ];
 
-  // Insert Resume button dynamically if game is active
   const navItems = [...baseNavItems];
   if (isGameActive) {
     navItems.splice(1, 0, { name: 'Resume', path: '/custom', icon: '▶️', isResume: true });
@@ -31,22 +30,33 @@ export default function BottomNav() {
         {navItems.map((item) => {
           const isActive = pathname === item.path || (item.path !== '/' && pathname?.startsWith(item.path));
           
+          if (item.isResume) {
+            return (
+              <Link 
+                key={item.name} 
+                href={item.path}
+                className="flex flex-col items-center justify-center space-y-0.5 active:scale-95 transition-transform bg-blue-600 text-white px-5 py-2 rounded-2xl shadow-md shadow-blue-200 dark:shadow-none"
+              >
+                <span className="text-xl drop-shadow-sm">{item.icon}</span>
+                <span className="text-[10px] font-black tracking-wide">{item.name}</span>
+              </Link>
+            );
+          }
+
           return (
             <Link 
               key={item.name} 
               href={item.path}
               className={`flex flex-col items-center justify-center w-full h-full space-y-1 active:scale-95 transition-transform ${
-                item.isResume 
+                isActive 
                   ? 'text-blue-600 dark:text-blue-400' 
-                  : isActive 
-                    ? 'text-slate-800 dark:text-slate-100' 
-                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
               }`}
             >
-              <span className={`text-xl sm:text-2xl ${isActive || item.isResume ? 'opacity-100 drop-shadow-sm' : 'opacity-70 grayscale'}`}>
+              <span className={`text-xl sm:text-2xl drop-shadow-sm transition-all duration-200 ${isActive ? 'scale-110' : ''}`}>
                 {item.icon}
               </span>
-              <span className={`text-[10px] font-bold tracking-wide ${isActive || item.isResume ? 'opacity-100' : 'opacity-70'}`}>
+              <span className="text-[10px] font-bold tracking-wide">
                 {item.name}
               </span>
             </Link>

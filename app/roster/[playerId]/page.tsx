@@ -26,7 +26,7 @@ type MatchRecord = {
 // --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 
-function rankInMatch(match: MatchRecord, playerId: string, isLowWin: boolean): number | null {
+function rankInGame(match: MatchRecord, playerId: string, isLowWin: boolean): number | null {
   const sorted = Object.entries(match.finalScores)
     .sort(([, a], [, b]) => isLowWin ? a - b : b - a)
     .map(([id]) => id);
@@ -38,13 +38,11 @@ export default function PlayerDetailPage() {
   const { playerId } = useParams<{ playerId: string }>();
   const router = useRouter();
 
-  // --- Global State ---
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [activePlayers, setActivePlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [history, setHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
   const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', []);
 
-  // --- Local State ---
   const rosterPlayer = globalRoster.find(p => p.id === playerId);
   
   const [isEditing, setIsEditing] = useState(false);
@@ -60,23 +58,24 @@ export default function PlayerDetailPage() {
       .map(match => {
         const profile = gameProfiles.find(p => p.name === match.gameName) || { winCondition: 'HIGH' };
         return {
-          matchId: match.matchId,
+          gameId: match.matchId,
           date: match.date,
           gameName: match.gameName,
           score: match.finalScores[playerId as string] || 0,
-          rank: rankInMatch(match, playerId as string, profile.winCondition === 'LOW')
+          rank: rankInGame(match, playerId as string, profile.winCondition === 'LOW'),
+          totalPlayersInGame: Object.keys(match.finalScores).length
         };
       });
   }, [history, playerId, gameProfiles]);
 
   const graphData = useMemo(() => [...games].reverse().map(g => g.score), [games]);
+  
+  // Advanced Stats
+  const totalWins = games.filter(g => g.rank === 1).length;
+  const lastPlaces = games.filter(g => g.rank !== null && g.rank === g.totalPlayersInGame && g.totalPlayersInGame > 1).length;
 
-  // Graph SVG Math
-  const width = 400;
-  const height = 120;
-  const max = Math.max(...graphData, 10);
-  const min = Math.min(...graphData, 0);
-  const range = max - min || 1;
+  const width = 400; const height = 120;
+  const max = Math.max(...graphData, 10); const min = Math.min(...graphData, 0); const range = max - min || 1;
 
   // --- Actions ---
   const handleSave = () => {
@@ -93,17 +92,10 @@ export default function PlayerDetailPage() {
   const handleDelete = () => {
     setGlobalRoster(globalRoster.filter(p => p.id !== playerId));
     setActivePlayers(activePlayers.filter(p => p.id !== playerId));
-    // Safe Delete: We keep the history intact
     router.push('/roster');
   };
 
-  if (!rosterPlayer) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-500">
-        Player not found or deleted.
-      </div>
-    );
-  }
+  if (!rosterPlayer) return null;
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
@@ -131,51 +123,67 @@ export default function PlayerDetailPage() {
         {/* DELETE CONFIRMATION */}
         {showDeleteConfirm && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-2xl p-5 mb-6 animate-in slide-in-from-top-2">
-            <h3 className="text-red-800 dark:text-red-400 font-bold mb-2 text-center">Delete {rosterPlayer.name}?</h3>
-            <p className="text-sm text-red-600 dark:text-red-300 mb-4 text-center">This removes them from the roster, but keeps their past game stats intact in the Vault.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-2.5 rounded-xl border border-slate-200 dark:border-slate-700">Cancel</button>
+            <h3 className="text-red-800 dark:text-red-400 font-bold mb-2 text-center">Delete Player?</h3>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white dark:bg-slate-800 font-bold py-2.5 rounded-xl border border-slate-200 dark:border-slate-700">Cancel</button>
               <button onClick={handleDelete} className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl shadow-sm">Yes, Delete</button>
             </div>
           </div>
         )}
 
-        {/* HERO PROFILE SECTION */}
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center relative overflow-hidden mb-8">
-          <div className="absolute -right-10 -top-10 text-9xl opacity-[0.03] dark:opacity-5 select-none pointer-events-none">
+        {/* BOLD PLAYER DASHBOARD */}
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden mb-8">
+          <div className="absolute -right-6 -bottom-6 text-9xl opacity-[0.03] dark:opacity-5 select-none pointer-events-none">
             {isEditing ? editEmoji : rosterPlayer.emoji}
           </div>
           
-          <div className="relative z-10 flex flex-col items-center">
+          <div className="relative z-10 flex items-center gap-5">
             {isEditing ? (
               <button 
                 onClick={() => setShowEmojiPicker(true)}
-                className="w-24 h-24 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 border-dashed rounded-full flex items-center justify-center text-5xl mb-4 active:scale-95 transition shadow-inner relative"
+                className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 border-dashed rounded-full flex items-center justify-center text-4xl active:scale-95 transition shadow-inner relative"
               >
                 {editEmoji}
-                <div className="absolute -bottom-2 bg-slate-800 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Tap</div>
+                <div className="absolute -bottom-1 bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Tap</div>
               </button>
             ) : (
-              <div className="w-24 h-24 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full flex items-center justify-center text-5xl mb-4 shadow-sm dark:shadow-none">
+              <div className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full flex items-center justify-center text-4xl shadow-sm dark:shadow-none">
                 {rosterPlayer.emoji}
               </div>
             )}
 
-            {isEditing ? (
-              <input 
-                type="text" 
-                value={editName} 
-                onChange={e => setEditName(e.target.value)} 
-                className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 font-black text-2xl text-center text-slate-800 dark:text-white outline-none focus:border-blue-500 w-full max-w-[250px]"
-                autoFocus
-              />
-            ) : (
-              <h1 className="text-3xl font-black text-slate-800 dark:text-white mb-2">{rosterPlayer.name}</h1>
-            )}
-            
-            <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-2">
-              Played {games.length} Games
-            </p>
+            <div className="flex-1 min-w-0">
+              {isEditing ? (
+                <input 
+                  type="text" 
+                  value={editName} 
+                  onChange={e => setEditName(e.target.value)} 
+                  className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-black text-2xl text-slate-800 dark:text-white outline-none focus:border-blue-500 w-full"
+                  autoFocus
+                />
+              ) : (
+                <h1 className="text-3xl font-black text-slate-800 dark:text-white truncate">{rosterPlayer.name}</h1>
+              )}
+            </div>
+          </div>
+
+          {/* ADVANCED STATS ROW */}
+          <div className="grid grid-cols-3 gap-3 mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
+             <div className="text-center">
+                <div className="text-2xl mb-1">🎲</div>
+                <div className="font-black text-xl text-slate-800 dark:text-white">{games.length}</div>
+                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Games</div>
+             </div>
+             <div className="text-center border-l border-slate-100 dark:border-slate-800">
+                <div className="text-2xl mb-1">🏆</div>
+                <div className="font-black text-xl text-slate-800 dark:text-white">{totalWins}</div>
+                <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">Wins</div>
+             </div>
+             <div className="text-center border-l border-slate-100 dark:border-slate-800">
+                <div className="text-2xl mb-1">🤡</div>
+                <div className="font-black text-xl text-slate-800 dark:text-white">{lastPlaces}</div>
+                <div className="text-[9px] font-bold text-red-400 uppercase tracking-widest">Last Place</div>
+             </div>
           </div>
         </div>
 
@@ -184,26 +192,14 @@ export default function PlayerDetailPage() {
           <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mb-8">
             <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Score Trend</h3>
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-              <polyline
-                points={graphData.map((val, i) => {
-                  const x = (i / Math.max(graphData.length - 1, 1)) * width;
-                  const y = height - ((val - min) / range) * height;
-                  return `${x},${y}`;
-                }).join(' ')}
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="drop-shadow-sm"
-              />
+              <polyline points={graphData.map((val, i) => { const x = (i / Math.max(graphData.length - 1, 1)) * width; const y = height - ((val - min) / range) * height; return `${x},${y}`; }).join(' ')} fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
             </svg>
           </div>
         )}
 
-        {/* MATCH HISTORY LIST */}
+        {/* GAME HISTORY LIST */}
         <h2 className="mt-8 mb-3 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
-          Recent Matches
+          Recent Games
         </h2>
 
         <div className="grid gap-3 pb-8">
@@ -211,7 +207,7 @@ export default function PlayerDetailPage() {
             <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium">No games played yet.</div>
           ) : (
             games.map(g => (
-              <div key={g.matchId} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
+              <div key={g.gameId} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-0.5">{g.date}</div>
                   <div className="text-lg font-black text-slate-800 dark:text-slate-100">{g.gameName}</div>
@@ -230,7 +226,7 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* --- EMOJI PICKER SUB-MODAL --- */}
+      {/* EMOJI PICKER SUB-MODAL */}
       {showEmojiPicker && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
