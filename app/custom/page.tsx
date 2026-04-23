@@ -1,7 +1,7 @@
 // app/custom/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
 
@@ -11,8 +11,9 @@ type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type PlayerSnapshot = { id: string; name: string; emoji: string };
 
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' };
-type GameSettings = { mode: 'UP' | 'DOWN'; target: number };
+// UPDATED: mode is now global, only target is session-specific
+type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
+type GameSettings = { target: number };
 
 type MatchRecord = {
   matchId: string;
@@ -44,11 +45,12 @@ export default function CustomTracker() {
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { mode: 'UP', target: 0 });
-  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
+  
+  // Settings & Profiles
+  const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
+  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   
-  // Track if this active session has ever been saved
   const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
 
@@ -59,15 +61,19 @@ export default function CustomTracker() {
   const [isSaved, setIsSaved] = useState(false);
   const [viewMode, setViewMode] = useState<'SETUP' | 'GRID' | 'GRAPH'>('GRID');
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
   
-  // Game Creation / Editing State
   const [isCreatingGame, setIsCreatingGame] = useState(false);
   const [newGameInput, setNewGameInput] = useState('');
   const [isEditingGameName, setIsEditingGameName] = useState(false);
   const [editNameInput, setEditNameInput] = useState('');
+  
+  // Celebration State
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
 
   const router = useRouter();
+  const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
+  const isGameStarted = rounds.length > 1 || Object.keys(rounds[0]?.scores || {}).length > 0;
 
   // --- 1. RESUME LOGIC ---
   useEffect(() => {
@@ -79,13 +85,42 @@ export default function CustomTracker() {
     }
   }, []);
 
-  // --- 2. AUTO-ADD ROW LOGIC ---
+  // --- 2. VICTORY & AUTO-ADD ROW LOGIC ---
+  const calculateTotal = (pId: string) => {
+    const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
+    return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
+  };
+
+  const isRoundComplete = players.every(p => 
+    rounds[rounds.length - 1].scores[p.id] !== undefined && rounds[rounds.length - 1].scores[p.id] !== null
+  );
+
+  const { isGameOver, currentWinner } = useMemo(() => {
+    if (!settings.target || settings.target <= 0 || !isRoundComplete) return { isGameOver: false, currentWinner: null };
+    
+    let over = false;
+    let winnerId: string | null = null;
+    let bestScore = activeProfile.scoreDirection === 'DOWN' ? Infinity : -Infinity;
+
+    players.forEach(p => {
+      const total = calculateTotal(p.id);
+      if (activeProfile.scoreDirection === 'UP' && total >= settings.target) {
+        over = true;
+        if (total > bestScore) { bestScore = total; winnerId = p.id; }
+      }
+      if (activeProfile.scoreDirection === 'DOWN' && total <= 0) {
+        over = true;
+        if (total < bestScore) { bestScore = total; winnerId = p.id; }
+      }
+    });
+
+    const winningPlayer = players.find(p => p.id === winnerId);
+    return { isGameOver: over, currentWinner: winningPlayer };
+  }, [rounds, players, settings.target, activeProfile.scoreDirection, isRoundComplete]);
+
+  // Handle Auto-Row (Paused if game is over)
   useEffect(() => {
-    if (players.length === 0 || rounds.length === 0) return;
-    const latestRound = rounds[rounds.length - 1];
-    const isRoundComplete = players.every(p => 
-      latestRound.scores[p.id] !== undefined && latestRound.scores[p.id] !== null
-    );
+    if (players.length === 0 || rounds.length === 0 || isGameOver) return;
 
     if (isRoundComplete) {
       const timeout = setTimeout(() => {
@@ -99,35 +134,17 @@ export default function CustomTracker() {
       }, 300);
       return () => clearTimeout(timeout);
     }
-  }, [rounds, players, setRounds]);
+  }, [rounds, players, setRounds, isGameOver, isRoundComplete]);
 
-  const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
-  const isGameStarted = rounds.length > 1 || Object.keys(rounds[0]?.scores || {}).length > 0;
-
-  // --- VICTORY STATE LOGIC ---
-  const calculateTotal = (pId: string) => {
-    const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
-    return settings.mode === 'DOWN' ? settings.target - sum : sum;
-  };
-
-  const isGameOver = (() => {
-    if (!settings.target || settings.target <= 0) return false;
-    let over = false;
-    players.forEach(p => {
-      const total = calculateTotal(p.id);
-      if (settings.mode === 'UP' && total >= settings.target) over = true;
-      if (settings.mode === 'DOWN' && total <= 0) over = true;
-    });
-    return over;
-  })();
-
+  // Trigger Emoji Rain
   useEffect(() => {
-    if (isGameOver && !hasCelebrated) {
+    if (isGameOver && !hasCelebrated && currentWinner) {
+      setWinnerEmoji(currentWinner.emoji);
       setShowCelebration(true);
       setHasCelebrated(true);
-      setTimeout(() => setShowCelebration(false), 4000);
+      setTimeout(() => setShowCelebration(false), 5000); // 5s rain
     }
-  }, [isGameOver, hasCelebrated, setHasCelebrated]);
+  }, [isGameOver, hasCelebrated, setHasCelebrated, currentWinner]);
 
 
   // --- Setup Actions ---
@@ -135,7 +152,7 @@ export default function CustomTracker() {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
     if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameProfiles([{ name: trimmed, winCondition: 'HIGH' }, ...gameProfiles]);
+      setGameProfiles([{ name: trimmed, winCondition: 'HIGH', scoreDirection: 'UP' }, ...gameProfiles]);
     }
     setActiveGameName(trimmed);
     setNewGameInput('');
@@ -146,29 +163,22 @@ export default function CustomTracker() {
     const trimmed = editNameInput.trim();
     if (!trimmed || trimmed === activeGameName) { setIsEditingGameName(false); return; }
     
-    // Update Profile Dictionary
-    const updatedProfiles = gameProfiles.map(p => p.name === activeGameName ? { ...p, name: trimmed } : p);
-    setGameProfiles(updatedProfiles);
-    
-    // Retroactively update History Vault
-    const updatedHistory = matchHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m);
-    setMatchHistory(updatedHistory);
-    
+    setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, name: trimmed } : p));
+    setMatchHistory(matchHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m));
     setActiveGameName(trimmed);
     setIsEditingGameName(false);
   };
 
-  const updateWinCondition = (condition: 'HIGH' | 'LOW') => {
-    setGameProfiles(gameProfiles.map(p => 
-      p.name === activeGameName ? { ...p, winCondition: condition } : p
-    ));
+  const updateProfileRule = (updates: Partial<GameProfile>) => {
+    setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, ...updates } : p));
   };
 
+  // Smart Clear Setup
   const clearSetup = () => {
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveGameName('Custom Game');
-    setSettings({ mode: 'UP', target: 0 });
+    setSettings({ target: 0 });
     setActiveCell(null);
     setInputValue('0');
     setActiveMatchId(null);
@@ -236,7 +246,7 @@ export default function CustomTracker() {
     players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
     
     const matchIdToUse = activeMatchId || Date.now().toString();
-    if (!activeMatchId) setActiveMatchId(matchIdToUse); // Lock in the ID if it's new
+    if (!activeMatchId) setActiveMatchId(matchIdToUse);
 
     const newMatch: MatchRecord = {
       matchId: matchIdToUse,
@@ -249,7 +259,6 @@ export default function CustomTracker() {
       settings: { ...settings }
     };
     
-    // Update existing or add new
     if (activeMatchId) {
       setMatchHistory(matchHistory.map(m => m.matchId === matchIdToUse ? newMatch : m));
     } else {
@@ -273,23 +282,49 @@ export default function CustomTracker() {
     setActiveCell(null);
   };
 
+  // Rain Drops Generation
+  const rainDrops = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
+    id: i,
+    emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
+    left: `${Math.random() * 100}%`,
+    animationDuration: `${Math.random() * 2 + 2}s`,
+    animationDelay: `${Math.random() * 2}s`
+  })), [winnerEmoji]);
+
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* CELEBRATION OVERLAY */}
+      {/* CSS EMOJI RAIN */}
       {showCelebration && (
-        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
-          <div className="text-center animate-bounce">
-            <div className="text-8xl mb-4">🏆 🎉 🏆</div>
-            <h2 className="text-4xl font-black text-white drop-shadow-lg">WINNER!</h2>
+        <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-500 flex items-center justify-center">
+            <h2 className="text-5xl font-black text-white drop-shadow-2xl animate-bounce z-10 text-center px-4">
+              {currentWinner?.name} Wins!
+            </h2>
           </div>
+          {rainDrops.map(drop => (
+            <div 
+              key={drop.id} 
+              className="absolute text-4xl animate-fall drop-shadow-xl"
+              style={{ left: drop.left, top: '-10%', animationDuration: drop.animationDuration, animationDelay: drop.animationDelay, animationFillMode: 'forwards' }}
+            >
+              {drop.emoji}
+            </div>
+          ))}
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes fall {
+              0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+              100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+            }
+            .animate-fall { animation-name: fall; animation-timing-function: linear; }
+          `}} />
         </div>
       )}
 
+      {/* --- SETUP VIEW --- */}
       {viewMode === 'SETUP' && (
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           
-          {/* UNIFIED HEADER */}
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
             <button 
@@ -330,7 +365,7 @@ export default function CustomTracker() {
               <div className="flex items-center gap-2 mb-6">
                  {isEditingGameName ? (
                     <div className="flex w-full gap-2 animate-in slide-in-from-left-2">
-                       <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold" autoFocus />
+                       <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold dark:text-white" autoFocus />
                        <button onClick={handleEditGameName} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Save</button>
                        <button onClick={() => setIsEditingGameName(false)} className="bg-slate-200 dark:bg-slate-800 px-4 rounded-xl font-bold text-slate-600 dark:text-slate-300">✕</button>
                     </div>
@@ -345,35 +380,37 @@ export default function CustomTracker() {
 
             {isCreatingGame && (
               <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
-                <input type="text" value={newGameInput} onChange={e => setNewGameInput(e.target.value)} placeholder="e.g. Uno, Darts..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 font-bold" autoFocus />
+                <input type="text" value={newGameInput} onChange={e => setNewGameInput(e.target.value)} placeholder="e.g. Uno, Darts..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 font-bold dark:text-white" autoFocus />
                 <button onClick={handleCreateGame} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Add</button>
                 <button onClick={() => setIsCreatingGame(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
               </div>
             )}
 
-            {/* Global & Session Rules */}
+            {/* Rules UI */}
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
             <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
               
               <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Winner has</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Win Condition</label>
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                  <button onClick={() => updateProfileRule({ winCondition: 'HIGH' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
+                  <button onClick={() => updateProfileRule({ winCondition: 'LOW' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
+                </div>
+
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3 mt-5">Global Rule: Scoring Direction</label>
                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                  <button onClick={() => updateWinCondition('HIGH')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
-                  <button onClick={() => updateWinCondition('LOW')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
+                  <button onClick={() => updateProfileRule({ scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeProfile.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
+                  <button onClick={() => updateProfileRule({ scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeProfile.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Scoring</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                  <button onClick={() => setSettings({ ...settings, mode: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
-                  <button onClick={() => setSettings({ ...settings, mode: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
-                </div>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Match Target</label>
                 <input 
                   type="number" 
                   value={settings.target || ''} 
-                  onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
-                  placeholder={settings.mode === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
+                  onChange={e => setSettings({ target: parseInt(e.target.value) || 0 })} 
+                  placeholder={activeProfile.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
                 />
               </div>
@@ -382,7 +419,7 @@ export default function CustomTracker() {
             {/* Roster Management */}
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
             <div className="flex gap-2 mb-4">
-              <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
+              <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium dark:text-white" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
               <button onClick={addPlayer} className="bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-5 py-3 rounded-xl font-bold active:scale-95 transition">+ Add</button>
             </div>
             
@@ -390,12 +427,13 @@ export default function CustomTracker() {
               {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added yet.</div> : players.map((p, i) => (
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
-                    <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full text-2xl flex items-center justify-center active:scale-95 transition">{p.emoji}</button>
+                    {/* Contrast glow behind emojis for dark mode visibility */}
+                    <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.emoji}</button>
                     <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}</span>
                   </div>
                   <div className="flex items-stretch">
                     <button onClick={() => removePlayer(p.id)} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
-                    <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 w-12">
+                    <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 w-12">
                       <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pb-1">▲</button>
                       <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pt-1">▼</button>
                     </div>
@@ -410,7 +448,9 @@ export default function CustomTracker() {
                 <div className="flex flex-wrap gap-2 mb-8">
                   {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).map(gp => (
                     <button key={gp.id} onClick={() => selectFromGlobal(gp)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-full flex items-center gap-2 shadow-sm active:scale-95 transition hover:border-blue-300">
-                      <span>{gp.emoji}</span><span className="font-bold text-slate-700 dark:text-slate-300">{gp.name}</span><span className="text-blue-500 text-lg font-black">+</span>
+                      <span className="bg-slate-50 dark:bg-slate-800/50 rounded-full w-6 h-6 flex items-center justify-center text-sm">{gp.emoji}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{gp.name}</span>
+                      <span className="text-blue-500 text-lg font-black pl-1">+</span>
                     </button>
                   ))}
                 </div>
@@ -439,7 +479,7 @@ export default function CustomTracker() {
                     <button 
                       key={emoji} 
                       onClick={() => { updateEmoji(activeEmojiPicker, emoji); setActiveEmojiPicker(null); }}
-                      className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm"
+                      className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
                     >
                       {emoji}
                     </button>
@@ -473,8 +513,8 @@ export default function CustomTracker() {
                       <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal bg-slate-100 dark:bg-slate-800 rounded-tl-xl">Rnd</th>
                       {players.map((p, i) => (
                         <th key={p.id} className={`p-3 font-semibold min-w-[80px] bg-slate-100 dark:bg-slate-800 ${i === players.length - 1 ? 'rounded-tr-xl' : ''}`}>
-                          <div className="text-2xl">{p.emoji}</div>
-                          <div className="text-xs truncate font-bold text-slate-400 uppercase">{p.name}</div>
+                          <div className="text-2xl bg-white dark:bg-slate-700/50 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
+                          <div className="text-xs truncate font-bold text-slate-400 dark:text-slate-300 uppercase">{p.name}</div>
                         </th>
                       ))}
                     </tr>
@@ -482,7 +522,7 @@ export default function CustomTracker() {
                   <tbody>
                     {rounds.map(round => (
                       <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950">
+                        <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50">
                           <div className="flex items-center justify-between px-1">
                             <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
                             <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
@@ -503,14 +543,18 @@ export default function CustomTracker() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] rounded-b-xl">
+                  <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] rounded-b-xl border-t dark:border-slate-700">
                     <tr>
-                      <td className="p-4 font-bold border-r border-slate-700 text-xs uppercase opacity-50 rounded-bl-xl">Tot</td>
+                      <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 rounded-bl-xl">Tot</td>
                       {players.map((p, i) => {
                         const total = calculateTotal(p.id);
-                        const isWinner = settings.target > 0 && (settings.mode === 'UP' ? total >= settings.target : total <= 0);
+                        let isWinner = false;
+                        if (settings.target > 0) {
+                          if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
+                          if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
+                        }
                         return (
-                          <td key={p.id} className={`p-4 font-black text-xl ${isWinner ? 'text-green-400' : ''} ${i === players.length - 1 ? 'rounded-br-xl' : ''}`}>
+                          <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''} ${i === players.length - 1 ? 'rounded-br-xl' : ''}`}>
                             {total}
                           </td>
                         );
@@ -535,7 +579,7 @@ export default function CustomTracker() {
               <div className="animate-in fade-in">
                 <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                   {players.map(p => (
-                    <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold">
+                    <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlayerColor(p.emoji) }}></div>
                       <span>{p.emoji}</span>
                     </div>
@@ -545,10 +589,10 @@ export default function CustomTracker() {
                   <svg viewBox={`0 0 400 200`} className="w-full h-auto overflow-visible">
                     {(() => {
                       const pointsData = players.map(p => {
-                        let runningTotal = settings.mode === 'DOWN' ? settings.target : 0;
+                        let runningTotal = activeProfile.scoreDirection === 'DOWN' ? settings.target : 0;
                         const points = [runningTotal];
                         rounds.forEach(r => {
-                          if (settings.mode === 'DOWN') runningTotal -= (r.scores[p.id] || 0);
+                          if (activeProfile.scoreDirection === 'DOWN') runningTotal -= (r.scores[p.id] || 0);
                           else runningTotal += (r.scores[p.id] || 0);
                           points.push(runningTotal);
                         });
@@ -579,7 +623,7 @@ export default function CustomTracker() {
 
       {/* NUMPAD */}
       {activeCell && viewMode === 'GRID' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
           <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 dark:bg-slate-950 rounded-2xl shadow-inner border border-slate-100 dark:border-slate-800">{inputValue}</div>
           <div className="grid grid-cols-3 gap-3">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => <button key={num} onClick={() => setInputValue(p => p === '0' ? num.toString() : p + num)} className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors">{num}</button>)}
