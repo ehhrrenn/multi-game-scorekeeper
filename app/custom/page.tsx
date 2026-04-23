@@ -10,8 +10,6 @@ type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type PlayerSnapshot = { id: string; name: string; emoji: string };
-
-// UPDATED: mode is now global, only target is session-specific
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number };
 
@@ -40,13 +38,11 @@ const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 const getPlayerColor = (emoji: string) => EMOJI_COLORS[emoji] || '#3b82f6';
 
 export default function CustomTracker() {
-  // --- Persisted State ---
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
   
-  // Settings & Profiles
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
   const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
@@ -54,7 +50,6 @@ export default function CustomTracker() {
   const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
 
-  // --- UI State ---
   const [newPlayerName, setNewPlayerName] = useState('');
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
@@ -67,7 +62,6 @@ export default function CustomTracker() {
   const [isEditingGameName, setIsEditingGameName] = useState(false);
   const [editNameInput, setEditNameInput] = useState('');
   
-  // Celebration State
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
 
@@ -75,7 +69,6 @@ export default function CustomTracker() {
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
   const isGameStarted = rounds.length > 1 || Object.keys(rounds[0]?.scores || {}).length > 0;
 
-  // --- 1. RESUME LOGIC ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedPlayers = window.localStorage.getItem('scorekeeper_players');
@@ -85,7 +78,6 @@ export default function CustomTracker() {
     }
   }, []);
 
-  // --- 2. VICTORY & AUTO-ADD ROW LOGIC ---
   const calculateTotal = (pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
@@ -118,7 +110,6 @@ export default function CustomTracker() {
     return { isGameOver: over, currentWinner: winningPlayer };
   }, [rounds, players, settings.target, activeProfile.scoreDirection, isRoundComplete]);
 
-  // Handle Auto-Row (Paused if game is over)
   useEffect(() => {
     if (players.length === 0 || rounds.length === 0 || isGameOver) return;
 
@@ -136,18 +127,15 @@ export default function CustomTracker() {
     }
   }, [rounds, players, setRounds, isGameOver, isRoundComplete]);
 
-  // Trigger Emoji Rain
   useEffect(() => {
     if (isGameOver && !hasCelebrated && currentWinner) {
       setWinnerEmoji(currentWinner.emoji);
       setShowCelebration(true);
       setHasCelebrated(true);
-      setTimeout(() => setShowCelebration(false), 5000); // 5s rain
+      setTimeout(() => setShowCelebration(false), 5000);
     }
   }, [isGameOver, hasCelebrated, setHasCelebrated, currentWinner]);
 
-
-  // --- Setup Actions ---
   const handleCreateGame = () => {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
@@ -173,7 +161,6 @@ export default function CustomTracker() {
     setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, ...updates } : p));
   };
 
-  // Smart Clear Setup
   const clearSetup = () => {
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
@@ -185,7 +172,6 @@ export default function CustomTracker() {
     setHasCelebrated(false);
   };
 
-  // --- Roster Management ---
   const addPlayer = () => {
     const trimmedName = newPlayerName.trim();
     if (!trimmedName) return;
@@ -227,7 +213,6 @@ export default function CustomTracker() {
     })));
   };
 
-  // --- Grid & Math Logic ---
   const addRound = () => {
     const nextId = rounds.length > 0 ? rounds[rounds.length - 1].roundId + 1 : 1;
     setRounds([...rounds, { roundId: nextId, scores: {} }]);
@@ -269,6 +254,18 @@ export default function CustomTracker() {
     setTimeout(() => setIsSaved(false), 2000);
   };
 
+  // --- NEW GAME LOOP ACTION ---
+  const handleStartNewGame = () => {
+    // 1. Save the final state to history
+    saveGame();
+    // 2. Clear the board for a fresh run, but keep players and settings
+    setRounds([{ roundId: 1, scores: {} }]);
+    setActiveMatchId(null);
+    setHasCelebrated(false);
+    setActiveCell(null);
+    setInputValue('0');
+  };
+
   const handleCellTap = (roundId: number, playerId: string) => {
     setActiveCell({ roundId, playerId });
     const existingScore = rounds.find(r => r.roundId === roundId)?.scores[playerId];
@@ -282,7 +279,6 @@ export default function CustomTracker() {
     setActiveCell(null);
   };
 
-  // Rain Drops Generation
   const rainDrops = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
     id: i,
     emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
@@ -294,7 +290,6 @@ export default function CustomTracker() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* CSS EMOJI RAIN */}
       {showCelebration && (
         <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-500 flex items-center justify-center">
@@ -321,10 +316,8 @@ export default function CustomTracker() {
         </div>
       )}
 
-      {/* --- SETUP VIEW --- */}
       {viewMode === 'SETUP' && (
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
-          
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
             <button 
@@ -337,7 +330,6 @@ export default function CustomTracker() {
           </div>
           
           <div className="p-6 pt-[88px]">
-            {/* Game Profile Selection */}
             <div className="flex justify-between items-end mb-2 ml-1">
                <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Select Game</h2>
             </div>
@@ -360,7 +352,6 @@ export default function CustomTracker() {
               </button>
             </div>
 
-            {/* Editing Active Game Name */}
             {!isCreatingGame && (
               <div className="flex items-center gap-2 mb-6">
                  {isEditingGameName ? (
@@ -386,10 +377,8 @@ export default function CustomTracker() {
               </div>
             )}
 
-            {/* Rules UI */}
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
             <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
-              
               <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Win Condition</label>
                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
@@ -416,7 +405,6 @@ export default function CustomTracker() {
               </div>
             </div>
             
-            {/* Roster Management */}
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
             <div className="flex gap-2 mb-4">
               <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium dark:text-white" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
@@ -427,7 +415,6 @@ export default function CustomTracker() {
               {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added yet.</div> : players.map((p, i) => (
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
-                    {/* Contrast glow behind emojis for dark mode visibility */}
                     <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.emoji}</button>
                     <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}</span>
                   </div>
@@ -466,7 +453,6 @@ export default function CustomTracker() {
             )}
           </div>
 
-          {/* EMOJI PICKER MODAL */}
           {activeEmojiPicker && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
               <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
@@ -491,7 +477,6 @@ export default function CustomTracker() {
         </div>
       )}
 
-      {/* --- ACTIVE GAME VIEWS (GRID & GRAPH) --- */}
       {viewMode !== 'SETUP' && (
         <div className="max-w-screen-md mx-auto">
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
@@ -563,8 +548,21 @@ export default function CustomTracker() {
                   </tfoot>
                 </table>
                 
+                {/* DYNAMIC POST-GAME BUTTONS */}
                 <div className="flex flex-row gap-3 mt-6">
-                  <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">+ Round</button>
+                  {isGameOver ? (
+                    <button 
+                      onClick={handleStartNewGame} 
+                      className="flex-1 bg-blue-600 text-white p-4 rounded-xl font-black active:bg-blue-700 transition-colors shadow-lg shadow-blue-100 dark:shadow-none"
+                    >
+                      🔄 Start New Game
+                    </button>
+                  ) : (
+                    <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">
+                      + Round
+                    </button>
+                  )}
+                  
                   <button 
                     onClick={saveGame} 
                     className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
@@ -621,7 +619,6 @@ export default function CustomTracker() {
         </div>
       )}
 
-      {/* NUMPAD */}
       {activeCell && viewMode === 'GRID' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
           <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 dark:bg-slate-950 rounded-2xl shadow-inner border border-slate-100 dark:border-slate-800">{inputValue}</div>
