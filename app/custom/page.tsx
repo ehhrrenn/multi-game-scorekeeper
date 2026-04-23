@@ -11,13 +11,13 @@ type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type PlayerSnapshot = { id: string; name: string; emoji: string };
 
+type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' };
 type GameSettings = { mode: 'UP' | 'DOWN'; target: number };
 
 type MatchRecord = {
   matchId: string;
   date: string;
   gameName: string;
-  winnerId: string | null;
   finalScores: Record<string, number>;
   activePlayerIds: string[];
   savedRounds: Round[];
@@ -27,7 +27,6 @@ type MatchRecord = {
 
 // --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
-
 const EMOJI_COLORS: Record<string, string> = {
   '🦊': '#f97316', '⚡️': '#eab308', '🦖': '#22c55e', '🤠': '#8b5cf6', 
   '👾': '#a855f7', '🍕': '#ef4444', '🚀': '#3b82f6', '🐙': '#ec4899', 
@@ -45,9 +44,13 @@ export default function CustomTracker() {
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  const [gameName, setGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
-  const [savedGameNames, setSavedGameNames] = useGameState<string[]>('scorekeeper_game_names', ['Custom Game']);
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { mode: 'UP', target: 0 });
+  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
+  const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
+  
+  // Track if this active session has ever been saved
+  const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
+  const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
 
   // --- UI State ---
   const [newPlayerName, setNewPlayerName] = useState('');
@@ -55,9 +58,14 @@ export default function CustomTracker() {
   const [inputValue, setInputValue] = useState('0');
   const [isSaved, setIsSaved] = useState(false);
   const [viewMode, setViewMode] = useState<'SETUP' | 'GRID' | 'GRAPH'>('GRID');
-  
-  // NEW: Emoji Picker State
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  
+  // Game Creation / Editing State
+  const [isCreatingGame, setIsCreatingGame] = useState(false);
+  const [newGameInput, setNewGameInput] = useState('');
+  const [isEditingGameName, setIsEditingGameName] = useState(false);
+  const [editNameInput, setEditNameInput] = useState('');
 
   const router = useRouter();
 
@@ -93,27 +101,78 @@ export default function CustomTracker() {
     }
   }, [rounds, players, setRounds]);
 
+  const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
   const isGameStarted = rounds.length > 1 || Object.keys(rounds[0]?.scores || {}).length > 0;
 
-  // --- Setup Actions ---
-  const handleStartGame = () => {
-    if (players.length === 0) return;
-    const trimmedName = gameName.trim() || 'Custom Game';
-    setGameName(trimmedName);
-    
-    if (!savedGameNames.find(n => n.toLowerCase() === trimmedName.toLowerCase())) {
-      setSavedGameNames([trimmedName, ...savedGameNames]);
+  // --- VICTORY STATE LOGIC ---
+  const calculateTotal = (pId: string) => {
+    const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
+    return settings.mode === 'DOWN' ? settings.target - sum : sum;
+  };
+
+  const isGameOver = (() => {
+    if (!settings.target || settings.target <= 0) return false;
+    let over = false;
+    players.forEach(p => {
+      const total = calculateTotal(p.id);
+      if (settings.mode === 'UP' && total >= settings.target) over = true;
+      if (settings.mode === 'DOWN' && total <= 0) over = true;
+    });
+    return over;
+  })();
+
+  useEffect(() => {
+    if (isGameOver && !hasCelebrated) {
+      setShowCelebration(true);
+      setHasCelebrated(true);
+      setTimeout(() => setShowCelebration(false), 4000);
     }
-    setViewMode('GRID');
+  }, [isGameOver, hasCelebrated, setHasCelebrated]);
+
+
+  // --- Setup Actions ---
+  const handleCreateGame = () => {
+    const trimmed = newGameInput.trim();
+    if (!trimmed) { setIsCreatingGame(false); return; }
+    if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
+      setGameProfiles([{ name: trimmed, winCondition: 'HIGH' }, ...gameProfiles]);
+    }
+    setActiveGameName(trimmed);
+    setNewGameInput('');
+    setIsCreatingGame(false);
+  };
+
+  const handleEditGameName = () => {
+    const trimmed = editNameInput.trim();
+    if (!trimmed || trimmed === activeGameName) { setIsEditingGameName(false); return; }
+    
+    // Update Profile Dictionary
+    const updatedProfiles = gameProfiles.map(p => p.name === activeGameName ? { ...p, name: trimmed } : p);
+    setGameProfiles(updatedProfiles);
+    
+    // Retroactively update History Vault
+    const updatedHistory = matchHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m);
+    setMatchHistory(updatedHistory);
+    
+    setActiveGameName(trimmed);
+    setIsEditingGameName(false);
+  };
+
+  const updateWinCondition = (condition: 'HIGH' | 'LOW') => {
+    setGameProfiles(gameProfiles.map(p => 
+      p.name === activeGameName ? { ...p, winCondition: condition } : p
+    ));
   };
 
   const clearSetup = () => {
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
-    setGameName('Custom Game');
+    setActiveGameName('Custom Game');
     setSettings({ mode: 'UP', target: 0 });
     setActiveCell(null);
     setInputValue('0');
+    setActiveMatchId(null);
+    setHasCelebrated(false);
   };
 
   // --- Roster Management ---
@@ -125,7 +184,6 @@ export default function CustomTracker() {
     if (existingGlobal) {
       if (!players.find(p => p.id === existingGlobal.id)) setPlayers([...players, existingGlobal]);
     } else {
-      // Auto-assigns random emoji on creation
       const newPlayer = { id: Date.now().toString(), name: trimmedName, emoji: getRandomEmoji() };
       setGlobalRoster([...globalRoster, newPlayer]);
       setPlayers([...players, newPlayer]);
@@ -149,7 +207,6 @@ export default function CustomTracker() {
     setPlayers(newPlayers);
   };
 
-  // Specific Emoji Update (Replaces randomize logic)
   const updateEmoji = (playerId: string, newEmoji: string) => {
     const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p);
     setPlayers(updatedPlayers);
@@ -161,11 +218,6 @@ export default function CustomTracker() {
   };
 
   // --- Grid & Math Logic ---
-  const calculateTotal = (pId: string) => {
-    const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
-    return settings.mode === 'DOWN' ? settings.target - sum : sum;
-  };
-
   const addRound = () => {
     const nextId = rounds.length > 0 ? rounds[rounds.length - 1].roundId + 1 : 1;
     setRounds([...rounds, { roundId: nextId, scores: {} }]);
@@ -183,24 +235,13 @@ export default function CustomTracker() {
     const finalScores: Record<string, number> = {};
     players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
     
-    let winnerId = players[0]?.id || null;
-    if (settings.mode === 'UP') {
-      let high = -Infinity;
-      Object.entries(finalScores).forEach(([id, s]) => { if (s > high) { high = s; winnerId = id; } });
-    } else {
-      let closestToZero = Infinity;
-      Object.entries(finalScores).forEach(([id, s]) => { 
-        if (Math.abs(s) < Math.abs(closestToZero)) { closestToZero = s; winnerId = id; } 
-      });
-    }
+    const matchIdToUse = activeMatchId || Date.now().toString();
+    if (!activeMatchId) setActiveMatchId(matchIdToUse); // Lock in the ID if it's new
 
-    const trimmedName = gameName.trim() || 'Custom Game';
-    
     const newMatch: MatchRecord = {
-      matchId: Date.now().toString(),
+      matchId: matchIdToUse,
       date: new Date().toLocaleDateString(),
-      gameName: trimmedName,
-      winnerId,
+      gameName: activeGameName,
       finalScores,
       activePlayerIds: players.map(p => p.id),
       savedRounds: JSON.parse(JSON.stringify(rounds)),
@@ -208,12 +249,17 @@ export default function CustomTracker() {
       settings: { ...settings }
     };
     
-    setMatchHistory([newMatch, ...matchHistory]);
+    // Update existing or add new
+    if (activeMatchId) {
+      setMatchHistory(matchHistory.map(m => m.matchId === matchIdToUse ? newMatch : m));
+    } else {
+      setMatchHistory([newMatch, ...matchHistory]);
+    }
+    
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  // Safe definition of handleCellTap
   const handleCellTap = (roundId: number, playerId: string) => {
     setActiveCell({ roundId, playerId });
     const existingScore = rounds.find(r => r.roundId === roundId)?.scores[playerId];
@@ -228,108 +274,153 @@ export default function CustomTracker() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 pb-32">
+    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* --- SETUP VIEW --- */}
+      {/* CELEBRATION OVERLAY */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-500">
+          <div className="text-center animate-bounce">
+            <div className="text-8xl mb-4">🏆 🎉 🏆</div>
+            <h2 className="text-4xl font-black text-white drop-shadow-lg">WINNER!</h2>
+          </div>
+        </div>
+      )}
+
       {viewMode === 'SETUP' && (
-        <div className="animate-in fade-in slide-in-from-bottom-2">
+        <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           
-          {/* UPDATED HEADER: Left aligned title, Top Right Start/Resume Button */}
-          <div className="fixed top-0 left-0 right-0 p-4 bg-white shadow-sm border-b z-40 flex items-center justify-between">
-            <h1 className="text-2xl font-black text-slate-800">Game Setup</h1>
+          {/* UNIFIED HEADER */}
+          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+            <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
             <button 
-              onClick={handleStartGame} 
+              onClick={() => setViewMode('GRID')} 
               disabled={players.length === 0}
-              className="bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm"
+              className="bg-blue-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm"
             >
-              {isGameStarted ? '▶ Resume' : '🚀 Start'}
+              {isGameOver ? '✏️ Edit Game' : (isGameStarted ? '▶ Resume' : '🚀 Start')}
             </button>
           </div>
           
           <div className="p-6 pt-[88px]">
-            {/* Game Title */}
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Game Title</h2>
-            <input type="text" value={gameName} onChange={e => setGameName(e.target.value)} className="text-2xl font-black text-slate-800 border-2 border-slate-200 rounded-xl w-full p-4 bg-white mb-3 focus:outline-none focus:border-blue-500" placeholder="What are we playing?" />
+            {/* Game Profile Selection */}
+            <div className="flex justify-between items-end mb-2 ml-1">
+               <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Select Game</h2>
+            </div>
             
-            {savedGameNames.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
-                {savedGameNames.map(name => (
-                  <button key={name} onClick={() => setGameName(name)} className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all border ${gameName === name ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
-                    {name}
-                  </button>
-                ))}
+            <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+              {gameProfiles.map(profile => (
+                <button 
+                  key={profile.name} 
+                  onClick={() => setActiveGameName(profile.name)} 
+                  className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-800 dark:border-slate-100 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+                >
+                  {profile.name}
+                </button>
+              ))}
+              <button 
+                onClick={() => setIsCreatingGame(true)} 
+                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 transition-all"
+              >
+                + New
+              </button>
+            </div>
+
+            {/* Editing Active Game Name */}
+            {!isCreatingGame && (
+              <div className="flex items-center gap-2 mb-6">
+                 {isEditingGameName ? (
+                    <div className="flex w-full gap-2 animate-in slide-in-from-left-2">
+                       <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold" autoFocus />
+                       <button onClick={handleEditGameName} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Save</button>
+                       <button onClick={() => setIsEditingGameName(false)} className="bg-slate-200 dark:bg-slate-800 px-4 rounded-xl font-bold text-slate-600 dark:text-slate-300">✕</button>
+                    </div>
+                 ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-black text-slate-800 dark:text-white px-2">{activeGameName}</span>
+                      <button onClick={() => { setEditNameInput(activeGameName); setIsEditingGameName(true); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">✏️</button>
+                    </div>
+                 )}
               </div>
             )}
 
-            {/* Rules Engine */}
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
-            <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 mb-8 shadow-sm">
-              <div className="flex bg-slate-100 p-1 rounded-xl mb-4">
-                <button onClick={() => setSettings({ ...settings, mode: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'UP' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>📈 Count Up</button>
-                <button onClick={() => setSettings({ ...settings, mode: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'DOWN' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>📉 Count Down</button>
+            {isCreatingGame && (
+              <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
+                <input type="text" value={newGameInput} onChange={e => setNewGameInput(e.target.value)} placeholder="e.g. Uno, Darts..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 font-bold" autoFocus />
+                <button onClick={handleCreateGame} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Add</button>
+                <button onClick={() => setIsCreatingGame(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
               </div>
+            )}
+
+            {/* Global & Session Rules */}
+            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
+              
+              <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Winner has</label>
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                  <button onClick={() => updateWinCondition('HIGH')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
+                  <button onClick={() => updateWinCondition('LOW')} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
+                </div>
+              </div>
+
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">
-                  {settings.mode === 'UP' ? 'Target Score (Optional)' : 'Starting Score'}
-                </label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Scoring</label>
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                  <button onClick={() => setSettings({ ...settings, mode: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
+                  <button onClick={() => setSettings({ ...settings, mode: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.mode === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
+                </div>
                 <input 
                   type="number" 
                   value={settings.target || ''} 
                   onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
-                  placeholder={settings.mode === 'UP' ? 'e.g. 10000' : 'e.g. 501'}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-800 outline-none focus:border-blue-500"
+                  placeholder={settings.mode === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
                 />
               </div>
             </div>
             
             {/* Roster Management */}
-            <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
+            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
             <div className="flex gap-2 mb-4">
-              <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
-              <button onClick={addPlayer} className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold active:scale-95 transition">+ Add</button>
+              <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
+              <button onClick={addPlayer} className="bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-5 py-3 rounded-xl font-bold active:scale-95 transition">+ Add</button>
             </div>
             
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
               {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added yet.</div> : players.map((p, i) => (
-                <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100' : ''}`}>
-                  
-                  {/* Player Info (Emoji triggers picker module) */}
+                <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
-                    <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 border border-slate-100 rounded-full text-2xl flex items-center justify-center active:scale-95 transition">{p.emoji}</button>
-                    <span className="font-bold text-lg text-slate-700">{p.name}</span>
+                    <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full text-2xl flex items-center justify-center active:scale-95 transition">{p.emoji}</button>
+                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}</span>
                   </div>
-
-                  {/* Actions & Turn Order Handles */}
                   <div className="flex items-stretch">
-                    <button onClick={() => removePlayer(p.id)} className="px-4 text-slate-300 hover:text-red-500 transition-colors border-l border-slate-100">✕</button>
-                    <div className="flex flex-col border-l border-slate-100 bg-slate-50 w-12">
-                      <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 disabled:opacity-20 transition-colors pb-1">▲</button>
-                      <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 disabled:opacity-20 transition-colors pt-1">▼</button>
+                    <button onClick={() => removePlayer(p.id)} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
+                    <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 w-12">
+                      <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pb-1">▲</button>
+                      <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pt-1">▼</button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Quick Add Global */}
             {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).length > 0 && (
               <>
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Available Players</h2>
+                <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Available Players</h2>
                 <div className="flex flex-wrap gap-2 mb-8">
                   {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).map(gp => (
-                    <button key={gp.id} onClick={() => selectFromGlobal(gp)} className="bg-white border border-slate-200 px-4 py-2 rounded-full flex items-center gap-2 shadow-sm active:scale-95 transition hover:border-blue-300">
-                      <span>{gp.emoji}</span><span className="font-bold text-slate-700">{gp.name}</span><span className="text-blue-500 text-lg font-black">+</span>
+                    <button key={gp.id} onClick={() => selectFromGlobal(gp)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-full flex items-center gap-2 shadow-sm active:scale-95 transition hover:border-blue-300">
+                      <span>{gp.emoji}</span><span className="font-bold text-slate-700 dark:text-slate-300">{gp.name}</span><span className="text-blue-500 text-lg font-black">+</span>
                     </button>
                   ))}
                 </div>
               </>
             )}
 
-            {/* Clear Setup */}
-            {(players.length > 0 || rounds.length > 1 || gameName !== 'Custom Game') && (
+            {(players.length > 0 || rounds.length > 1 || activeGameName !== 'Custom Game') && (
               <div className="flex justify-center mt-8 pb-12">
-                <button onClick={clearSetup} className="text-red-500 font-bold px-6 py-3 rounded-xl hover:bg-red-50 active:scale-95 transition-all text-xs uppercase tracking-widest">
-                  Clear Setup
+                <button onClick={clearSetup} className="text-red-500 font-bold px-6 py-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-95 transition-all text-xs uppercase tracking-widest">
+                  Clear Active Setup
                 </button>
               </div>
             )}
@@ -338,20 +429,17 @@ export default function CustomTracker() {
           {/* EMOJI PICKER MODAL */}
           {activeEmojiPicker && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-              <div className="bg-white rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+              <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-black text-slate-800">Choose Emoji</h3>
-                  <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-500 hover:text-slate-700 active:scale-95 transition-all">✕</button>
+                  <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
+                  <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
                 </div>
                 <div className="grid grid-cols-5 gap-3">
                   {EMOJIS.map(emoji => (
                     <button 
                       key={emoji} 
-                      onClick={() => {
-                        updateEmoji(activeEmojiPicker, emoji);
-                        setActiveEmojiPicker(null);
-                      }}
-                      className="text-3xl aspect-square flex items-center justify-center bg-slate-50 border border-slate-100 hover:bg-slate-100 rounded-2xl active:scale-90 transition-all shadow-sm"
+                      onClick={() => { updateEmoji(activeEmojiPicker, emoji); setActiveEmojiPicker(null); }}
+                      className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm"
                     >
                       {emoji}
                     </button>
@@ -365,27 +453,26 @@ export default function CustomTracker() {
 
       {/* --- ACTIVE GAME VIEWS (GRID & GRAPH) --- */}
       {viewMode !== 'SETUP' && (
-        <>
-          <div className="fixed top-0 left-0 right-0 p-4 bg-white shadow-sm border-b z-40">
-            <div className="flex justify-between items-center mb-4 h-10">
-              <h1 className="text-2xl font-black text-slate-800 truncate pr-4">{gameName}</h1>
-              <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
-            </div>
-            <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>🧮 Score Grid</button>
-              <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>📈 Live Graph</button>
-            </div>
+        <div className="max-w-screen-md mx-auto">
+          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+            <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{activeGameName}</h1>
+            <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
           </div>
 
-          <div className="pt-[124px]">
+          <div className="pt-[80px] px-4">
+             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+              <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
+              <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
+            </div>
+
             {viewMode === 'GRID' && (
-              <div className="animate-in fade-in">
+              <div className="animate-in fade-in overflow-x-auto pb-4">
                 <table className="w-full text-center border-collapse">
-                  <thead className="bg-slate-100 sticky top-[124px] border-b z-30 shadow-sm">
+                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-30 shadow-sm rounded-t-xl">
                     <tr>
-                      <th className="p-3 w-16 text-slate-500 font-normal bg-slate-100">Rnd</th>
-                      {players.map(p => (
-                        <th key={p.id} className="p-3 font-semibold min-w-[80px] bg-slate-100">
+                      <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal bg-slate-100 dark:bg-slate-800 rounded-tl-xl">Rnd</th>
+                      {players.map((p, i) => (
+                        <th key={p.id} className={`p-3 font-semibold min-w-[80px] bg-slate-100 dark:bg-slate-800 ${i === players.length - 1 ? 'rounded-tr-xl' : ''}`}>
                           <div className="text-2xl">{p.emoji}</div>
                           <div className="text-xs truncate font-bold text-slate-400 uppercase">{p.name}</div>
                         </th>
@@ -394,11 +481,11 @@ export default function CustomTracker() {
                   </thead>
                   <tbody>
                     {rounds.map(round => (
-                      <tr key={round.roundId} className="border-b bg-white">
-                        <td className="p-2 border-r align-middle bg-slate-50">
+                      <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
+                        <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950">
                           <div className="flex items-center justify-between px-1">
-                            <span className="text-slate-500 font-bold ml-1">{round.roundId}</span>
-                            <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 hover:text-red-500 px-1">✕</button>
+                            <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
+                            <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
                           </div>
                         </td>
                         {players.map(p => {
@@ -407,23 +494,23 @@ export default function CustomTracker() {
                             <td 
                               key={p.id} 
                               onClick={() => handleCellTap(round.roundId, p.id)} 
-                              className={`p-4 text-xl font-medium border-l border-slate-50 ${isSelected ? 'bg-blue-50 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50'}`}
+                              className={`p-4 text-xl font-medium border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
                             >
-                              {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200">-</span>}
+                              {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
                             </td>
                           );
                         })}
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-slate-800 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)]">
+                  <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] rounded-b-xl">
                     <tr>
-                      <td className="p-4 font-bold border-r border-slate-700 text-xs uppercase opacity-50">Tot</td>
-                      {players.map(p => {
+                      <td className="p-4 font-bold border-r border-slate-700 text-xs uppercase opacity-50 rounded-bl-xl">Tot</td>
+                      {players.map((p, i) => {
                         const total = calculateTotal(p.id);
                         const isWinner = settings.target > 0 && (settings.mode === 'UP' ? total >= settings.target : total <= 0);
                         return (
-                          <td key={p.id} className={`p-4 font-black text-xl ${isWinner ? 'text-green-400' : ''}`}>
+                          <td key={p.id} className={`p-4 font-black text-xl ${isWinner ? 'text-green-400' : ''} ${i === players.length - 1 ? 'rounded-br-xl' : ''}`}>
                             {total}
                           </td>
                         );
@@ -432,11 +519,11 @@ export default function CustomTracker() {
                   </tfoot>
                 </table>
                 
-                <div className="p-5 flex flex-row gap-3 max-w-md mx-auto mt-4">
-                  <button onClick={addRound} className="flex-1 bg-white border-2 p-3.5 rounded-xl font-bold active:bg-slate-50 transition-colors shadow-sm">+ Add Round</button>
+                <div className="flex flex-row gap-3 mt-6">
+                  <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">+ Round</button>
                   <button 
                     onClick={saveGame} 
-                    className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 text-white'}`}
+                    className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
                   >
                     <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
                   </button>
@@ -445,8 +532,8 @@ export default function CustomTracker() {
             )}
             
             {viewMode === 'GRAPH' && (
-              <div className="p-4 animate-in fade-in">
-                <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white p-3 rounded-xl shadow-sm border border-slate-100">
+              <div className="animate-in fade-in">
+                <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                   {players.map(p => (
                     <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlayerColor(p.emoji) }}></div>
@@ -454,7 +541,7 @@ export default function CustomTracker() {
                     </div>
                   ))}
                 </div>
-                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
                   <svg viewBox={`0 0 400 200`} className="w-full h-auto overflow-visible">
                     {(() => {
                       const pointsData = players.map(p => {
@@ -487,20 +574,20 @@ export default function CustomTracker() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* NUMPAD */}
       {activeCell && viewMode === 'GRID' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.1)] border-t-2 border-slate-100 rounded-t-3xl p-5 pb-12 z-[60] animate-in slide-in-from-bottom-full">
-          <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 rounded-2xl shadow-inner border border-slate-100">{inputValue}</div>
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
+          <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 dark:bg-slate-950 rounded-2xl shadow-inner border border-slate-100 dark:border-slate-800">{inputValue}</div>
           <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => <button key={num} onClick={() => setInputValue(p => p === '0' ? num.toString() : p + num)} className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 transition-colors">{num}</button>)}
-            <button onClick={() => setInputValue(p => p.startsWith('-') ? p.substring(1) : '-' + p)} className="bg-slate-200 py-5 rounded-2xl text-xl font-bold active:bg-slate-300">+/-</button>
-            <button onClick={() => setInputValue(p => p === '0' ? '0' : p + '0')} className="bg-slate-100 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200">0</button>
-            <button onClick={() => setInputValue(p => p.slice(0, -1) || '0')} className="bg-red-50 text-red-500 py-5 rounded-2xl text-2xl font-bold active:bg-red-100 transition-all active:scale-95">⌫</button>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => <button key={num} onClick={() => setInputValue(p => p === '0' ? num.toString() : p + num)} className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors">{num}</button>)}
+            <button onClick={() => setInputValue(p => p.startsWith('-') ? p.substring(1) : '-' + p)} className="bg-slate-200 dark:bg-slate-700 py-5 rounded-2xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600">+/-</button>
+            <button onClick={() => setInputValue(p => p === '0' ? '0' : p + '0')} className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700">0</button>
+            <button onClick={() => setInputValue(p => p.slice(0, -1) || '0')} className="bg-red-50 dark:bg-red-900/20 text-red-500 py-5 rounded-2xl text-2xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95">⌫</button>
           </div>
-          <button onClick={submitScore} className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100">Enter Score</button>
+          <button onClick={submitScore} className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100 dark:shadow-none">Enter Score</button>
         </div>
       )}
     </main>
