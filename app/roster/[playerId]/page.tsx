@@ -1,11 +1,10 @@
 // app/roster/[playerId]/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useGameState } from '../../../hooks/useGameState';
 
-// --- Types ---
 type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type PlayerSnapshot = { id: string; name: string; emoji: string };
@@ -23,7 +22,6 @@ type MatchRecord = {
   settings?: GameSettings;
 };
 
-// --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 
 function rankInGame(match: MatchRecord, playerId: string, isLowWin: boolean): number | null {
@@ -46,12 +44,21 @@ export default function PlayerDetailPage() {
   const rosterPlayer = globalRoster.find(p => p.id === playerId);
   
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(rosterPlayer?.name || '');
-  const [editEmoji, setEditEmoji] = useState(rosterPlayer?.emoji || '👤');
+  const [editName, setEditName] = useState('');
+  const [editEmoji, setEditEmoji] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // Game Filter State
+  const [filterGame, setFilterGame] = useState<string | 'ALL'>('ALL');
 
-  // --- Analytics Engine ---
+  useEffect(() => {
+    if (rosterPlayer) {
+      setEditName(rosterPlayer.name);
+      setEditEmoji(rosterPlayer.emoji);
+    }
+  }, [rosterPlayer]);
+
   const games = useMemo(() => {
     return history
       .filter(match => match.activePlayerIds.includes(playerId as string))
@@ -68,16 +75,23 @@ export default function PlayerDetailPage() {
       });
   }, [history, playerId, gameProfiles]);
 
+  const uniqueGames = Array.from(new Set(games.map(g => g.gameName)));
+  const filteredGames = filterGame === 'ALL' ? games : games.filter(g => g.gameName === filterGame);
+
   const graphData = useMemo(() => [...games].reverse().map(g => g.score), [games]);
   
-  // Advanced Stats
   const totalWins = games.filter(g => g.rank === 1).length;
   const lastPlaces = games.filter(g => g.rank !== null && g.rank === g.totalPlayersInGame && g.totalPlayersInGame > 1).length;
 
   const width = 400; const height = 120;
   const max = Math.max(...graphData, 10); const min = Math.min(...graphData, 0); const range = max - min || 1;
 
-  // --- Actions ---
+  const handleEditClick = () => {
+    setEditName(rosterPlayer?.name || '');
+    setEditEmoji(rosterPlayer?.emoji || '👤');
+    setIsEditing(true);
+  };
+
   const handleSave = () => {
     const trimmed = editName.trim() || 'Unknown';
     setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p));
@@ -100,6 +114,28 @@ export default function PlayerDetailPage() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
+      {/* FLOATING DELETE MODAL */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="text-4xl text-center mb-4">🗑️</div>
+            <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Delete Player?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
+              This will permanently remove <span className="font-bold text-slate-700 dark:text-slate-200">{rosterPlayer.name}</span> from the roster, but their history will remain safe in the vault.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={handleDelete} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 dark:shadow-none active:scale-95 transition">
+                Yes, Delete
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold py-3 mt-2">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* UNIFIED HEADER */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
         <h1 className="text-xl font-black text-slate-800 dark:text-white">Player Profile</h1>
@@ -111,7 +147,7 @@ export default function PlayerDetailPage() {
             </>
           ) : (
             <>
-              <button onClick={() => { setIsEditing(true); setShowDeleteConfirm(false); }} className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-lg active:scale-95 transition">✏️</button>
+              <button onClick={handleEditClick} className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-lg active:scale-95 transition">✏️</button>
               <button onClick={() => setShowDeleteConfirm(true)} className="w-10 h-10 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full text-lg active:scale-95 transition">🗑️</button>
             </>
           )}
@@ -119,17 +155,6 @@ export default function PlayerDetailPage() {
       </div>
 
       <div className="pt-[88px] px-4 max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2">
-        
-        {/* DELETE CONFIRMATION */}
-        {showDeleteConfirm && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-2xl p-5 mb-6 animate-in slide-in-from-top-2">
-            <h3 className="text-red-800 dark:text-red-400 font-bold mb-2 text-center">Delete Player?</h3>
-            <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white dark:bg-slate-800 font-bold py-2.5 rounded-xl border border-slate-200 dark:border-slate-700">Cancel</button>
-              <button onClick={handleDelete} className="flex-1 bg-red-600 text-white font-bold py-2.5 rounded-xl shadow-sm">Yes, Delete</button>
-            </div>
-          </div>
-        )}
 
         {/* BOLD PLAYER DASHBOARD */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden mb-8">
@@ -167,7 +192,6 @@ export default function PlayerDetailPage() {
             </div>
           </div>
 
-          {/* ADVANCED STATS ROW */}
           <div className="grid grid-cols-3 gap-3 mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
              <div className="text-center">
                 <div className="text-2xl mb-1">🎲</div>
@@ -197,36 +221,54 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* GAME HISTORY LIST */}
-        <h2 className="mt-8 mb-3 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
-          Recent Games
-        </h2>
+        {/* GAME LOG FILTERS */}
+        <div className="flex justify-between items-end mb-3 ml-1">
+           <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+             Game History
+           </h2>
+        </div>
+        
+        {games.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+            <button onClick={() => setFilterGame('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === 'ALL' ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
+              All Games
+            </button>
+            {uniqueGames.map(name => (
+              <button key={name} onClick={() => setFilterGame(name)} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
+                {name}
+              </button>
+            ))}
+          </div>
+        )}
 
+        {/* LOG CARDS (With Last Place Tag) */}
         <div className="grid gap-3 pb-8">
-          {games.length === 0 ? (
-            <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium">No games played yet.</div>
+          {filteredGames.length === 0 ? (
+            <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium">No games match this filter.</div>
           ) : (
-            games.map(g => (
-              <div key={g.gameId} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-0.5">{g.date}</div>
-                  <div className="text-lg font-black text-slate-800 dark:text-slate-100">{g.gameName}</div>
+            filteredGames.map(g => {
+              const isLastPlace = g.rank !== null && g.rank === g.totalPlayersInGame && g.totalPlayersInGame > 1;
+              return (
+                <div key={g.gameId} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-0.5">{g.date}</div>
+                    <div className="text-lg font-black text-slate-800 dark:text-slate-100">{g.gameName}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-slate-800 dark:text-white mb-0.5">{g.score} <span className="text-[10px] text-slate-400">pts</span></div>
+                    {g.rank && (
+                      <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block ${g.rank === 1 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : isLastPlace ? 'bg-red-50 dark:bg-red-900/20 text-red-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                        {g.rank === 1 ? '🏆 Winner' : isLastPlace ? '🤡 Last Place' : `Rank #${g.rank}`}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-slate-800 dark:text-white mb-0.5">{g.score} <span className="text-[10px] text-slate-400">pts</span></div>
-                  {g.rank && (
-                    <div className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block ${g.rank === 1 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
-                      {g.rank === 1 ? '🏆 Winner' : `Rank #${g.rank}`}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* EMOJI PICKER SUB-MODAL */}
       {showEmojiPicker && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">

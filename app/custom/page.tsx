@@ -67,7 +67,9 @@ export default function CustomTracker() {
 
   const router = useRouter();
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
-  const isGameStarted = rounds.length > 1 || Object.keys(rounds[0]?.scores || {}).length > 0;
+  
+  // Clean Check for "Is Game Started"
+  const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -83,7 +85,7 @@ export default function CustomTracker() {
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };
 
-  const isRoundComplete = players.every(p => 
+  const isRoundComplete = players.length > 0 && players.every(p => 
     rounds[rounds.length - 1].scores[p.id] !== undefined && rounds[rounds.length - 1].scores[p.id] !== null
   );
 
@@ -254,16 +256,20 @@ export default function CustomTracker() {
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  // --- NEW GAME LOOP ACTION ---
   const handleStartNewGame = () => {
-    // 1. Save the final state to history
     saveGame();
-    // 2. Clear the board for a fresh run, but keep players and settings
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveMatchId(null);
     setHasCelebrated(false);
     setActiveCell(null);
     setInputValue('0');
+  };
+
+  // --- NEW: Save & Close ---
+  const handleSaveAndClose = () => {
+    saveGame();
+    clearSetup();
+    router.push('/');
   };
 
   const handleCellTap = (roundId: number, playerId: string) => {
@@ -320,12 +326,14 @@ export default function CustomTracker() {
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
+            
+            {/* UPDATED: Strict 2-state logic */}
             <button 
               onClick={() => setViewMode('GRID')} 
               disabled={players.length === 0}
-              className="bg-blue-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm"
+              className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${isGameStarted ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
             >
-              {isGameOver ? '✏️ Edit Game' : (isGameStarted ? '▶ Resume' : '🚀 Start')}
+              {isGameStarted ? '▶️ Resume Game' : '🚀 Start Game'}
             </button>
           </div>
           
@@ -490,10 +498,8 @@ export default function CustomTracker() {
               <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
             </div>
 
-{viewMode === 'GRID' && (
+            {viewMode === 'GRID' && (
               <div className="animate-in fade-in pb-4">
-                
-                {/* ISOLATED SCROLL CONTAINER FOR TABLE ONLY */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
                   <table className="w-full text-center border-collapse">
                     <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-30 shadow-sm">
@@ -552,7 +558,6 @@ export default function CustomTracker() {
                   </table>
                 </div>
                 
-                {/* DYNAMIC POST-GAME BUTTONS (FIXED OUTSIDE TABLE) */}
                 <div className="flex flex-row gap-3">
                   {isGameOver ? (
                     <button 
@@ -567,15 +572,25 @@ export default function CustomTracker() {
                     </button>
                   )}
                   
-                  <button 
-                    onClick={saveGame} 
-                    className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-                  >
-                    <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
-                  </button>
+                  {/* UPDATED: Save & Close Action */}
+                  {isGameOver ? (
+                    <button 
+                      onClick={handleSaveAndClose} 
+                      className="flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
+                    >
+                      💾 Save & Close Game
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={saveGame} 
+                      className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                    >
+                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
+                    </button>
+                  )}
                 </div>
               </div>
-            )}            
+            )}
             
             {viewMode === 'GRAPH' && (
               <div className="animate-in fade-in">
