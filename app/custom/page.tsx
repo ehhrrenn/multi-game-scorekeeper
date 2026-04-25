@@ -68,7 +68,6 @@ export default function CustomTracker() {
   const router = useRouter();
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
   
-  // Clean Check for "Is Game Started"
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
   useEffect(() => {
@@ -265,7 +264,6 @@ export default function CustomTracker() {
     setInputValue('0');
   };
 
-  // --- NEW: Save & Close ---
   const handleSaveAndClose = () => {
     saveGame();
     clearSetup();
@@ -323,11 +321,10 @@ export default function CustomTracker() {
       )}
 
       {viewMode === 'SETUP' && (
+        {/* SETUP VIEW REMAINS UNCHANGED - COLLAPSED FOR BREVITY */}
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
-            
-            {/* UPDATED: Strict 2-state logic */}
             <button 
               onClick={() => setViewMode('GRID')} 
               disabled={players.length === 0}
@@ -501,18 +498,22 @@ export default function CustomTracker() {
             {viewMode === 'GRID' && (
               <div className="animate-in fade-in pb-4">
                 <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
-                  <table className="w-full text-center border-collapse">
-                    <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-30 shadow-sm">
+                  <table className="w-full text-center border-collapse relative">
+                    
+                    {/* 🧮 THE UPDATED STICKY HEADER */}
+                    <thead className="sticky top-[64px] z-30 shadow-sm backdrop-blur-md bg-slate-100/90 dark:bg-slate-800/90 transition-colors">
                       <tr>
-                        <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal bg-slate-100 dark:bg-slate-800">Rnd</th>
+                        <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal border-b border-slate-200 dark:border-slate-700">Rnd</th>
                         {players.map((p) => (
-                          <th key={p.id} className="p-3 font-semibold min-w-[80px] bg-slate-100 dark:bg-slate-800">
-                            <div className="text-2xl bg-white dark:bg-slate-700/50 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
-                            <div className="text-xs truncate font-bold text-slate-400 dark:text-slate-300 uppercase">{p.name}</div>
+                          <th key={p.id} className="p-3 font-semibold min-w-[80px] border-b border-slate-200 dark:border-slate-700">
+                            <div className="text-2xl bg-white dark:bg-slate-700/80 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
+                            <div className="text-xs truncate font-bold text-slate-500 dark:text-slate-300 uppercase">{p.name}</div>
                           </th>
                         ))}
                       </tr>
                     </thead>
+                    {/* --------------------------- */}
+                    
                     <tbody>
                       {rounds.map(round => (
                         <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -572,20 +573,19 @@ export default function CustomTracker() {
                     </button>
                   )}
                   
-                  {/* UPDATED: Save & Close Action */}
                   {isGameOver ? (
                     <button 
                       onClick={handleSaveAndClose} 
                       className="flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
                     >
-                      💾 Save & Close Game
+                      💾 Save Round & Close
                     </button>
                   ) : (
                     <button 
                       onClick={saveGame} 
                       className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
                     >
-                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
+                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Round'}
                     </button>
                   )}
                 </div>
@@ -593,6 +593,7 @@ export default function CustomTracker() {
             )}
             
             {viewMode === 'GRAPH' && (
+              {/* GRAPH COMPONENT REMAINS UNCHANGED - COLLAPSED FOR BREVITY */}
               <div className="animate-in fade-in">
                 <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                   {players.map(p => (
@@ -638,16 +639,48 @@ export default function CustomTracker() {
         </div>
       )}
 
+      {/* 🔢 THE ACTIVE CELL KEYPAD */}
       {activeCell && viewMode === 'GRID' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
           <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 dark:bg-slate-950 rounded-2xl shadow-inner border border-slate-100 dark:border-slate-800">{inputValue}</div>
           <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => <button key={num} onClick={() => setInputValue(p => p === '0' ? num.toString() : p + num)} className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors">{num}</button>)}
-            <button onClick={() => setInputValue(p => p.startsWith('-') ? p.substring(1) : '-' + p)} className="bg-slate-200 dark:bg-slate-700 py-5 rounded-2xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600">+/-</button>
-            <button onClick={() => setInputValue(p => p === '0' ? '0' : p + '0')} className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700">0</button>
-            <button onClick={() => setInputValue(p => p.slice(0, -1) || '0')} className="bg-red-50 dark:bg-red-900/20 text-red-500 py-5 rounded-2xl text-2xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95">⌫</button>
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+              <button 
+                key={num} 
+                onClick={() => setInputValue(p => p === '0' ? num.toString() : p === '-' ? '-' + num : p + num)} 
+                className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+              >
+                {num}
+              </button>
+            ))}
+            
+            {/* UPDATED: Bulletproof sign toggling logic */}
+            <button 
+              onClick={() => setInputValue(p => p === '0' ? '-' : p === '-' ? '0' : p.startsWith('-') ? p.substring(1) : '-' + p)} 
+              className="bg-slate-200 dark:bg-slate-700 py-5 rounded-2xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600"
+            >
+              +/-
+            </button>
+            
+            <button 
+              onClick={() => setInputValue(p => p === '0' || p === '-' ? p : p + '0')} 
+              className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
+            >
+              0
+            </button>
+            <button 
+              onClick={() => setInputValue(p => p.slice(0, -1) || '0')} 
+              className="bg-red-50 dark:bg-red-900/20 text-red-500 py-5 rounded-2xl text-2xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
+            >
+              ⌫
+            </button>
           </div>
-          <button onClick={submitScore} className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100 dark:shadow-none">Enter Score</button>
+          <button 
+            onClick={submitScore} 
+            className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100 dark:shadow-none"
+          >
+            Enter Score
+          </button>
         </div>
       )}
     </main>
