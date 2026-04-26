@@ -10,11 +10,11 @@ type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type PlayerSnapshot = { id: string; name: string; emoji: string };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
-type GameSettings = { target: number };
+type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' }; 
+type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
-type MatchRecord = {
-  matchId: string;
+type GameRecord = {
+  gameId: string;
   date: string;
   gameName: string;
   finalScores: Record<string, number>;
@@ -41,16 +41,17 @@ export default function CustomTracker() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
-  const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
+  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
-  const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
-  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
+  const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0, scoreDirection: 'UP' });
+  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   
-  const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
+  const [activeGameId, setActiveGameId] = useGameState<string | null>('scorekeeper_active_game_id', null);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
 
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [isCreatingPlayer, setIsCreatingPlayer] = useState(false);
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
   const [isSaved, setIsSaved] = useState(false);
@@ -71,6 +72,17 @@ export default function CustomTracker() {
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
   useEffect(() => {
+    if (viewMode === 'SETUP' && !isGameStarted) {
+      const lastPlayedOfThisType = gameHistory.find(g => g.gameName === activeGameName);
+      if (lastPlayedOfThisType?.settings) {
+        setSettings(lastPlayedOfThisType.settings);
+      } else {
+        setSettings({ target: 0, scoreDirection: 'UP' });
+      }
+    }
+  }, [activeGameName, viewMode, isGameStarted]);
+
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedPlayers = window.localStorage.getItem('scorekeeper_players');
       const parsedPlayers = storedPlayers ? JSON.parse(storedPlayers) : [];
@@ -81,7 +93,7 @@ export default function CustomTracker() {
 
   const calculateTotal = (pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
-    return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
+    return settings.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };
 
   const isRoundComplete = players.length > 0 && players.every(p => 
@@ -93,15 +105,15 @@ export default function CustomTracker() {
     
     let over = false;
     let winnerId: string | null = null;
-    let bestScore = activeProfile.scoreDirection === 'DOWN' ? Infinity : -Infinity;
+    let bestScore = settings.scoreDirection === 'DOWN' ? Infinity : -Infinity;
 
     players.forEach(p => {
       const total = calculateTotal(p.id);
-      if (activeProfile.scoreDirection === 'UP' && total >= settings.target) {
+      if (settings.scoreDirection === 'UP' && total >= settings.target) {
         over = true;
         if (total > bestScore) { bestScore = total; winnerId = p.id; }
       }
-      if (activeProfile.scoreDirection === 'DOWN' && total <= 0) {
+      if (settings.scoreDirection === 'DOWN' && total <= 0) {
         over = true;
         if (total < bestScore) { bestScore = total; winnerId = p.id; }
       }
@@ -109,7 +121,7 @@ export default function CustomTracker() {
 
     const winningPlayer = players.find(p => p.id === winnerId);
     return { isGameOver: over, currentWinner: winningPlayer };
-  }, [rounds, players, settings.target, activeProfile.scoreDirection, isRoundComplete]);
+  }, [rounds, players, settings.target, settings.scoreDirection, isRoundComplete]);
 
   useEffect(() => {
     if (players.length === 0 || rounds.length === 0 || isGameOver) return;
@@ -141,7 +153,7 @@ export default function CustomTracker() {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
     if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameProfiles([{ name: trimmed, winCondition: 'HIGH', scoreDirection: 'UP' }, ...gameProfiles]);
+      setGameProfiles([{ name: trimmed, winCondition: 'HIGH' }, ...gameProfiles]);
     }
     setActiveGameName(trimmed);
     setNewGameInput('');
@@ -153,7 +165,7 @@ export default function CustomTracker() {
     if (!trimmed || trimmed === activeGameName) { setIsEditingGameName(false); return; }
     
     setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, name: trimmed } : p));
-    setMatchHistory(matchHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m));
+    setGameHistory(gameHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m));
     setActiveGameName(trimmed);
     setIsEditingGameName(false);
   };
@@ -166,16 +178,16 @@ export default function CustomTracker() {
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveGameName('Custom Game');
-    setSettings({ target: 0 });
+    setSettings({ target: 0, scoreDirection: 'UP' });
     setActiveCell(null);
     setInputValue('0');
-    setActiveMatchId(null);
+    setActiveGameId(null);
     setHasCelebrated(false);
   };
 
   const addPlayer = () => {
     const trimmedName = newPlayerName.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) { setIsCreatingPlayer(false); return; }
 
     const existingGlobal = globalRoster.find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
     if (existingGlobal) {
@@ -186,6 +198,7 @@ export default function CustomTracker() {
       setPlayers([...players, newPlayer]);
     }
     setNewPlayerName('');
+    setIsCreatingPlayer(false);
   };
 
   const selectFromGlobal = (player: Player) => {
@@ -208,9 +221,9 @@ export default function CustomTracker() {
     const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p);
     setPlayers(updatedPlayers);
     setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
-    setMatchHistory(matchHistory.map(match => ({
-      ...match,
-      playerSnapshots: match.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p)
+    setGameHistory(gameHistory.map(game => ({
+      ...game,
+      playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p)
     })));
   };
 
@@ -231,11 +244,11 @@ export default function CustomTracker() {
     const finalScores: Record<string, number> = {};
     players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
     
-    const matchIdToUse = activeMatchId || Date.now().toString();
-    if (!activeMatchId) setActiveMatchId(matchIdToUse);
+    const gameIdToUse = activeGameId || Date.now().toString();
+    if (!activeGameId) setActiveGameId(gameIdToUse);
 
-    const newMatch: MatchRecord = {
-      matchId: matchIdToUse,
+    const newGame: GameRecord = {
+      gameId: gameIdToUse,
       date: new Date().toLocaleDateString(),
       gameName: activeGameName,
       finalScores,
@@ -245,10 +258,10 @@ export default function CustomTracker() {
       settings: { ...settings }
     };
     
-    if (activeMatchId) {
-      setMatchHistory(matchHistory.map(m => m.matchId === matchIdToUse ? newMatch : m));
+    if (activeGameId) {
+      setGameHistory(gameHistory.map(m => m.gameId === gameIdToUse ? newGame : m));
     } else {
-      setMatchHistory([newMatch, ...matchHistory]);
+      setGameHistory([newGame, ...gameHistory]);
     }
     
     setIsSaved(true);
@@ -258,7 +271,7 @@ export default function CustomTracker() {
   const handleStartNewGame = () => {
     saveGame();
     setRounds([{ roundId: 1, scores: {} }]);
-    setActiveMatchId(null);
+    setActiveGameId(null);
     setHasCelebrated(false);
     setActiveCell(null);
     setInputValue('0');
@@ -350,7 +363,7 @@ export default function CustomTracker() {
               ))}
               <button 
                 onClick={() => setIsCreatingGame(true)} 
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 transition-all"
+                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-slate-800 transition-all"
               >
                 + New
               </button>
@@ -385,38 +398,64 @@ export default function CustomTracker() {
             <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
               <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Win Condition</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                   <button onClick={() => updateProfileRule({ winCondition: 'HIGH' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
                   <button onClick={() => updateProfileRule({ winCondition: 'LOW' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
-                </div>
-
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3 mt-5">Global Rule: Scoring Direction</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                  <button onClick={() => updateProfileRule({ scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeProfile.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
-                  <button onClick={() => updateProfileRule({ scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeProfile.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Match Target</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rules: Target & Direction</label>
+                
+                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
+                  <button onClick={() => setSettings({ ...settings, scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
+                  <button onClick={() => setSettings({ ...settings, scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
+                </div>
+
                 <input 
                   type="number" 
                   value={settings.target || ''} 
-                  onChange={e => setSettings({ target: parseInt(e.target.value) || 0 })} 
-                  placeholder={activeProfile.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
+                  onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
+                  placeholder={settings.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
                 />
               </div>
             </div>
             
-            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
-            <div className="flex gap-2 mb-4">
-              <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium dark:text-white" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
-              <button onClick={addPlayer} className="bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-5 py-3 rounded-xl font-bold active:scale-95 transition">+ Add</button>
+            {/* SAVED ROSTER MOVED ABOVE ACTIVE PLAYERS */}
+            <div className="flex justify-between items-end mb-2 ml-1 mt-6">
+              <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Saved Roster</h2>
             </div>
             
+            <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+              {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).map(gp => (
+                <button 
+                  key={gp.id} 
+                  onClick={() => selectFromGlobal(gp)} 
+                  className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
+                >
+                  <span>{gp.emoji}</span> {gp.name}
+                </button>
+              ))}
+              <button 
+                onClick={() => setIsCreatingPlayer(true)} 
+                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 transition-all"
+              >
+                + New Player
+              </button>
+            </div>
+
+            {isCreatingPlayer && (
+              <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
+                <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-emerald-500 font-bold dark:text-white" autoFocus />
+                <button onClick={addPlayer} className="bg-emerald-600 text-white px-5 rounded-xl font-bold">Add</button>
+                <button onClick={() => setIsCreatingPlayer(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
+              </div>
+            )}
+
+            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Current Active Players</h2>
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added yet.</div> : players.map((p, i) => (
+              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : players.map((p, i) => (
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
                     <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.emoji}</button>
@@ -433,23 +472,8 @@ export default function CustomTracker() {
               ))}
             </div>
 
-            {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).length > 0 && (
-              <>
-                <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Available Players</h2>
-                <div className="flex flex-wrap gap-2 mb-8">
-                  {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).map(gp => (
-                    <button key={gp.id} onClick={() => selectFromGlobal(gp)} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-full flex items-center gap-2 shadow-sm active:scale-95 transition hover:border-blue-300">
-                      <span className="bg-slate-50 dark:bg-slate-800/50 rounded-full w-6 h-6 flex items-center justify-center text-sm">{gp.emoji}</span>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">{gp.name}</span>
-                      <span className="text-blue-500 text-lg font-black pl-1">+</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
             {(players.length > 0 || rounds.length > 1 || activeGameName !== 'Custom Game') && (
-              <div className="flex justify-center mt-8 pb-12">
+              <div className="flex justify-center mt-12 pb-12">
                 <button onClick={clearSetup} className="text-red-500 font-bold px-6 py-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-95 transition-all text-xs uppercase tracking-widest">
                   Clear Active Setup
                 </button>
@@ -496,11 +520,12 @@ export default function CustomTracker() {
 
             {viewMode === 'GRID' && (
               <div className="animate-in fade-in pb-4">
-                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
+                
+                {/* 🚨 REMOVED `overflow-x-auto` HERE SO STICKY HEADER WORKS GLOBALLY */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
                   <table className="w-full text-center border-collapse relative">
                     
-                    {/* 🧮 THE UPDATED STICKY HEADER */}
-                    <thead className="sticky top-[64px] z-30 shadow-sm backdrop-blur-md bg-slate-100/90 dark:bg-slate-800/90 transition-colors">
+                    <thead className="sticky top-[64px] z-30 shadow-sm backdrop-blur-md bg-slate-100/95 dark:bg-slate-800/95 transition-colors">
                       <tr>
                         <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal border-b border-slate-200 dark:border-slate-700">Rnd</th>
                         {players.map((p) => (
@@ -511,7 +536,6 @@ export default function CustomTracker() {
                         ))}
                       </tr>
                     </thead>
-                    {/* --------------------------- */}
                     
                     <tbody>
                       {rounds.map(round => (
@@ -544,8 +568,8 @@ export default function CustomTracker() {
                           const total = calculateTotal(p.id);
                           let isWinner = false;
                           if (settings.target > 0) {
-                            if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
-                            if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
+                            if (settings.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
+                            if (settings.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
                           }
                           return (
                             <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
@@ -577,14 +601,14 @@ export default function CustomTracker() {
                       onClick={handleSaveAndClose} 
                       className="flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
                     >
-                      💾 Save Round & Close
+                      💾 Save Game & Close
                     </button>
                   ) : (
                     <button 
                       onClick={saveGame} 
                       className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
                     >
-                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Round'}
+                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
                     </button>
                   )}
                 </div>
@@ -601,18 +625,20 @@ export default function CustomTracker() {
                     </div>
                   ))}
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                  <svg viewBox={`0 0 400 200`} className="w-full h-auto overflow-visible">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                  
+                  {/* Expanded SVG viewBox to 480 wide to leave 80px room on the right for labels */}
+                  <svg viewBox={`0 -20 480 240`} className="w-full h-auto overflow-visible">
                     {(() => {
                       const pointsData = players.map(p => {
-                        let runningTotal = activeProfile.scoreDirection === 'DOWN' ? settings.target : 0;
+                        let runningTotal = settings.scoreDirection === 'DOWN' ? settings.target : 0;
                         const points = [runningTotal];
                         rounds.forEach(r => {
-                          if (activeProfile.scoreDirection === 'DOWN') runningTotal -= (r.scores[p.id] || 0);
+                          if (settings.scoreDirection === 'DOWN') runningTotal -= (r.scores[p.id] || 0);
                           else runningTotal += (r.scores[p.id] || 0);
                           points.push(runningTotal);
                         });
-                        return { color: getPlayerColor(p.emoji), points };
+                        return { color: getPlayerColor(p.emoji), emoji: p.emoji, finalScore: runningTotal, points };
                       });
                       
                       const allScores = pointsData.flatMap(d => d.points);
@@ -620,11 +646,42 @@ export default function CustomTracker() {
                       const min = Math.min(...allScores, 0);
                       const range = max - min || 1;
                       
+                      // 1. Calculate Target Y coordinates for the labels
+                      const labelData = pointsData.map(d => ({
+                        ...d,
+                        targetY: 200 - ((d.finalScore - min) / range) * 200
+                      })).sort((a, b) => a.targetY - b.targetY); // Sort by vertical position to detect overlaps
+                      
+                      // 2. Anti-collision algorithm (push labels down if they overlap)
+                      for (let i = 1; i < labelData.length; i++) {
+                        if (labelData[i].targetY - labelData[i - 1].targetY < 18) {
+                          labelData[i].targetY = labelData[i - 1].targetY + 18;
+                        }
+                      }
+
                       return (
                         <>
+                          {/* Zero Line */}
                           {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" />}
+                          
+                          {/* The Lines */}
                           {pointsData.map((d, i) => (
-                            <polyline key={i} points={d.points.map((s, idx) => `${(idx / rounds.length) * 400},${200 - ((s - min) / range) * 200}`).join(' ')} fill="none" stroke={d.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
+                            <polyline key={`line-${i}`} points={d.points.map((s, idx) => `${(idx / rounds.length) * 400},${200 - ((s - min) / range) * 200}`).join(' ')} fill="none" stroke={d.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
+                          ))}
+
+                          {/* The Collision-Detected Labels */}
+                          {labelData.map((d, i) => (
+                             <text
+                               key={`label-${i}`}
+                               x="408" 
+                               y={d.targetY + 5} // Vertically center on its anchor point
+                               fill={d.color}
+                               fontSize="14"
+                               fontWeight="bold"
+                               className="drop-shadow-sm"
+                             >
+                               {d.finalScore} {d.emoji}
+                             </text>
                           ))}
                         </>
                       );
@@ -637,45 +694,47 @@ export default function CustomTracker() {
         </div>
       )}
 
-      {/* 🔢 THE ACTIVE CELL KEYPAD */}
       {activeCell && viewMode === 'GRID' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-3xl p-5 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
-          <div className="text-center text-5xl font-black mb-5 py-4 bg-slate-50 dark:bg-slate-950 rounded-2xl shadow-inner border border-slate-100 dark:border-slate-800">{inputValue}</div>
-          <div className="grid grid-cols-3 gap-3">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-2xl p-4 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
+          
+          <div className="flex justify-between items-center mb-3">
+             <div className="flex-1 text-center text-4xl font-black py-2 bg-slate-50 dark:bg-slate-950 rounded-xl shadow-inner border border-slate-100 dark:border-slate-800 tracking-tight">{inputValue}</div>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-2">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
               <button 
                 key={num} 
                 onClick={() => setInputValue(p => p === '0' ? num.toString() : p === '-' ? '-' + num : p + num)} 
-                className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+                className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
               >
                 {num}
               </button>
             ))}
             
-            {/* UPDATED: Bulletproof sign toggling logic */}
             <button 
               onClick={() => setInputValue(p => p === '0' ? '-' : p === '-' ? '0' : p.startsWith('-') ? p.substring(1) : '-' + p)} 
-              className="bg-slate-200 dark:bg-slate-700 py-5 rounded-2xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600"
+              className="bg-slate-200 dark:bg-slate-700 py-3 rounded-xl text-lg font-bold active:bg-slate-300 dark:active:bg-slate-600"
             >
               +/-
             </button>
             
             <button 
               onClick={() => setInputValue(p => p === '0' || p === '-' ? p : p + '0')} 
-              className="bg-slate-100 dark:bg-slate-800 py-5 rounded-2xl text-2xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
+              className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
             >
               0
             </button>
             <button 
               onClick={() => setInputValue(p => p.slice(0, -1) || '0')} 
-              className="bg-red-50 dark:bg-red-900/20 text-red-500 py-5 rounded-2xl text-2xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
+              className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
             >
               ⌫
             </button>
           </div>
           <button 
             onClick={submitScore} 
-            className="w-full mt-4 bg-blue-600 text-white py-5 rounded-2xl text-xl font-bold active:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100 dark:shadow-none"
+            className="w-full mt-3 bg-blue-600 text-white py-3.5 rounded-xl text-lg font-bold active:bg-blue-700 transition-all active:scale-95 shadow-md shadow-blue-500/20"
           >
             Enter Score
           </button>
