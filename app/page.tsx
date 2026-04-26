@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useGameState } from '../hooks/useGameState';
+import AuthButton from './components/AuthButton';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string };
