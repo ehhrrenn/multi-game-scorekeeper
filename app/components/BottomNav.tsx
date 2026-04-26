@@ -8,9 +8,8 @@ export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Check if a custom game is currently in progress
-  const [rounds] = useGameState<any[]>('scorekeeper_rounds', []);
-  const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
+  // Check if there is an active game in memory
+  const [activeGameId] = useGameState<string | null>('scorekeeper_active_game_id', null);
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-screen-md px-4 pointer-events-none flex justify-center">
@@ -43,7 +42,7 @@ export default function BottomNav() {
         </button>
 
         {/* Dynamic Resume Button (Evenly spaced on the right) */}
-        {isGameStarted && (
+        {activeGameId && (
           <div className="pl-4 sm:pl-6 border-l border-slate-200 dark:border-slate-700 flex items-center animate-in slide-in-from-right-4 fade-in duration-300">
             <button 
               onClick={() => router.push('/custom')}

@@ -2,368 +2,345 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
+import BottomNav from '../components/BottomNav';
+import GameCard from '../components/GameCard';
 
 // --- Types ---
-type Round = { roundId: number; scores: Record<string, number> };
 type PlayerSnapshot = { id: string; name: string; emoji: string };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' };
-type GameSettings = { mode: 'UP' | 'DOWN'; target: number };
+type Round = { roundId: number; scores: Record<string, number> };
+type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
-type MatchRecord = {
-  matchId: string;
+export type GameRecord = {
+  gameId: string;
   date: string;
   gameName: string;
   finalScores: Record<string, number>;
   activePlayerIds: string[];
-  savedRounds: Round[];
+  savedRounds?: Round[];
   playerSnapshots: PlayerSnapshot[];
-  settings?: GameSettings; 
+  settings?: GameSettings;
 };
 
-const LINE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
-
 export default function HistoryPage() {
-  const router = useRouter();
+  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
-  // --- State ---
-  const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
-  
-  const [activeFilter, setActiveFilter] = useState<string>('All');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [expandedView, setExpandedView] = useState<'STANDINGS' | 'GRID' | 'GRAPH'>('STANDINGS');
+  // --- Filters & Toggles ---
+  const [selectedGame, setSelectedGame] = useState<string>('ALL');
+  const [selectedPlayer, setSelectedPlayer] = useState<string>('ALL');
+  const [graphMode, setGraphMode] = useState<'TOTAL' | 'PERCENTAGE'>('TOTAL');
+  const [timeFilter, setTimeFilter] = useState<'1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL'>('ALL');
+  const [expandedGameId, setExpandedGameId] = useState<string | null>(null);
 
-  // --- 1. Filter Logic ---
-  const gameTypes = useMemo(() => {
-    const types = new Set(matchHistory.map(m => m.gameName));
-    return ['All', ...Array.from(types)];
-  }, [matchHistory]);
+  const uniqueGames = useMemo(() => Array.from(new Set(gameHistory.map(g => g.gameName))), [gameHistory]);
+  const uniquePlayers = useMemo(() => {
+    const players = new Map<string, PlayerSnapshot>();
+    gameHistory.forEach(game => {
+      game.playerSnapshots.forEach(p => {
+        if (!players.has(p.id)) players.set(p.id, p);
+      });
+    });
+    return Array.from(players.values());
+  }, [gameHistory]);
 
-  const filteredMatches = useMemo(() => {
-    if (activeFilter === 'All') return matchHistory;
-    return matchHistory.filter(m => m.gameName === activeFilter);
-  }, [matchHistory, activeFilter]);
+  const filteredHistory = useMemo(() => {
+    return gameHistory.filter(game => {
+      const matchGame = selectedGame === 'ALL' || game.gameName === selectedGame;
+      const matchPlayer = selectedPlayer === 'ALL' || game.activePlayerIds.includes(selectedPlayer);
+      return matchGame && matchPlayer;
+    });
+  }, [gameHistory, selectedGame, selectedPlayer]);
 
-  const activeProfile = gameProfiles.find(p => p.name === activeFilter) || { name: activeFilter, winCondition: 'HIGH' as const };
-  const isLowWin = activeProfile.winCondition === 'LOW';
+  const getWinnerIds = (game: GameRecord) => {
+    const isCountDown = game.settings?.scoreDirection === 'DOWN';
+    let bestScore = isCountDown ? Infinity : -Infinity;
+    let winners: string[] = [];
 
-  // --- 2. Analytics Engine (Standard Ranking + Dynamic Best Score) ---
-  const { rankedLeaderboard, bestScore } = useMemo(() => {
-    // Note: Storing 'id' inside the object fixes the Duplicate Key error
-    const wins: Record<string, { id: string; name: string; emoji: string; count: number }> = {};
-    let top = { score: isLowWin ? Infinity : -Infinity, name: '', emoji: '', date: '' };
+    Object.entries(game.finalScores).forEach(([pId, score]) => {
+      if (isCountDown ? score < bestScore : score > bestScore) {
+        bestScore = score;
+        winners = [pId];
+      } else if (score === bestScore) {
+        winners.push(pId);
+      }
+    });
+    return winners;
+  };
 
-    filteredMatches.forEach(match => {
-      let matchWinnerId: string | null = null;
-      let winningScore = isLowWin ? Infinity : -Infinity;
-      
-      Object.entries(match.finalScores).forEach(([pId, score]) => {
-        // Find winner of this match
-        if (isLowWin ? score < winningScore : score > winningScore) {
-          winningScore = score;
-          matchWinnerId = pId;
+  const handleDeleteGame = (gameIdToDelete: string) => {
+    setGameHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
+    if (expandedGameId === gameIdToDelete) setExpandedGameId(null);
+  };
+
+  // --- Graph Data Calculation with Time Filter ---
+  const graphData = useMemo(() => {
+    let chronologicalHistory = [...filteredHistory].sort((a, b) => parseInt(a.gameId) - parseInt(b.gameId));
+    
+    // Apply Time Filter (gameId is an exact epoch timestamp!)
+    if (timeFilter !== 'ALL') {
+      const now = Date.now();
+      const ranges = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+      const cutoff = now - (ranges[timeFilter] * 24 * 60 * 60 * 1000);
+      chronologicalHistory = chronologicalHistory.filter(game => parseInt(game.gameId) >= cutoff);
+    }
+
+    let playersToChart: PlayerSnapshot[] = [];
+    if (selectedPlayer !== 'ALL') {
+      const p = uniquePlayers.find(p => p.id === selectedPlayer);
+      if (p) playersToChart = [p];
+    } else {
+      const winCounts: Record<string, number> = {};
+      chronologicalHistory.forEach(game => {
+        getWinnerIds(game).forEach(wId => winCounts[wId] = (winCounts[wId] || 0) + 1);
+      });
+      const top3Ids = Object.entries(winCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+      playersToChart = uniquePlayers.filter(p => top3Ids.includes(p.id));
+    }
+
+    return playersToChart.map(player => {
+      let cumulativeWins = 0;
+      let gamesPlayedByPlayer = 0;
+      const points: number[] = [0]; 
+
+      chronologicalHistory.forEach(game => {
+        if (game.activePlayerIds.includes(player.id)) {
+          gamesPlayedByPlayer++;
+          const winners = getWinnerIds(game);
+          if (winners.includes(player.id)) cumulativeWins++;
         }
-        
-        // Find All-Time Best Score
-        if (isLowWin ? score < top.score : score > top.score) {
-          const player = match.playerSnapshots.find(p => p.id === pId);
-          top = { score, name: player?.name || 'Unknown', emoji: player?.emoji || '👤', date: match.date };
+        if (graphMode === 'TOTAL') {
+          points.push(cumulativeWins);
+        } else {
+          points.push(gamesPlayedByPlayer > 0 ? Math.round((cumulativeWins / gamesPlayedByPlayer) * 100) : 0);
         }
       });
 
-      // Tally Win
-      if (matchWinnerId) {
-        const winner = match.playerSnapshots.find(p => p.id === matchWinnerId);
-        if (winner) {
-          if (!wins[winner.id]) wins[winner.id] = { id: winner.id, name: winner.name, emoji: winner.emoji, count: 0 };
-          wins[winner.id].count += 1;
+      return { ...player, points };
+    });
+  }, [filteredHistory, selectedPlayer, uniquePlayers, graphMode, timeFilter]);
+
+  const heroStats = useMemo(() => {
+    const totalGames = filteredHistory.length;
+    
+    const playerStats: Record<string, { wins: number; played: number; name: string; emoji: string }> = {};
+    uniquePlayers.forEach(p => { playerStats[p.id] = { wins: 0, played: 0, name: p.name, emoji: p.emoji }; });
+
+    filteredHistory.forEach(game => {
+      const winners = getWinnerIds(game);
+      game.activePlayerIds.forEach(pId => {
+        if (playerStats[pId]) {
+          playerStats[pId].played += 1;
+          if (winners.includes(pId)) { playerStats[pId].wins += 1; }
+        }
+      });
+    });
+
+    type PlayerStat = { wins: number; played: number; name: string; emoji: string };
+    type PlayerStatWithPct = PlayerStat & { pct: number };
+
+    let mostWinsPlayer: PlayerStat | null = null;
+    let highestWinPctPlayer: PlayerStatWithPct | null = null;
+    
+    let maxWins = 0;
+    let maxWinPct = -1;
+
+    const threshold = totalGames >= 5 ? 3 : 1;
+
+    Object.values(playerStats).forEach(stat => {
+      if (stat.wins > maxWins) {
+        maxWins = stat.wins;
+        mostWinsPlayer = stat;
+      }
+      if (stat.played >= threshold) {
+        const pct = Math.round((stat.wins / stat.played) * 100);
+        if (pct > maxWinPct) {
+          maxWinPct = pct;
+          highestWinPctPlayer = { ...stat, pct };
         }
       }
     });
 
-    // Standard Ranking Algorithm (1, 2, 2, 4)
-    const sortedPlayers = Object.values(wins).sort((a, b) => b.count - a.count);
-    const ranked: Array<{ id: string; name: string; emoji: string; count: number; rank: number }> = [];
-    
-    let currentRank = 1;
-    for (let i = 0; i < sortedPlayers.length; i++) {
-      if (i > 0 && sortedPlayers[i].count < sortedPlayers[i - 1].count) {
-        currentRank = i + 1;
-      }
-      ranked.push({ ...sortedPlayers[i], rank: currentRank });
-    }
-
-    return {
-      rankedLeaderboard: ranked,
-      bestScore: (top.score === Infinity || top.score === -Infinity) ? null : top
-    };
-  }, [filteredMatches, isLowWin]);
-
-  // --- Actions ---
-  const toggleAccordion = (matchId: string) => {
-    const isExpanding = expandedId !== matchId;
-    setExpandedId(isExpanding ? matchId : null);
-    if (isExpanding) setExpandedView('STANDINGS');
-  };
-
-  const deleteMatch = (matchId: string) => {
-    setMatchHistory(matchHistory.filter(m => m.matchId !== matchId));
-    setExpandedId(null);
-  };
-
-  const resumeMatch = (match: MatchRecord) => {
-    window.localStorage.setItem('scorekeeper_active_match_id', JSON.stringify(match.matchId));
-    window.localStorage.setItem('scorekeeper_players', JSON.stringify(match.playerSnapshots));
-    window.localStorage.setItem('scorekeeper_rounds', JSON.stringify(match.savedRounds));
-    window.localStorage.setItem('scorekeeper_gameName', JSON.stringify(match.gameName));
-    if (match.settings) window.localStorage.setItem('scorekeeper_settings', JSON.stringify(match.settings));
-    
-    router.push('/custom');
-  };
+    return { totalGames, mostWinsPlayer, highestWinPctPlayer, threshold };
+  }, [filteredHistory, uniquePlayers]);
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* UNIFIED HEADER & FILTER BAR */}
-      <div className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 px-4 pt-4 pb-2 max-w-screen-md mx-auto">
-        <h1 className="text-2xl font-black text-slate-800 dark:text-white mb-4">History Vault</h1>
-        
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-          {gameTypes.map(type => (
-            <button
-              key={type}
-              onClick={() => { setActiveFilter(type); setExpandedId(null); }}
-              className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-bold transition-all border ${
-                activeFilter === type 
-                ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-800 dark:border-slate-100 shadow-sm' 
-                : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
+      <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
+          <h1 className="text-2xl font-black">History Vault</h1>
+          <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
+            {gameHistory.length} Total Logs
+          </span>
         </div>
       </div>
 
-      <div className="pt-[124px] px-4 max-w-screen-md mx-auto">
-        {matchHistory.length === 0 ? (
-          <div className="text-center p-10 bg-slate-100 dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 mt-10">
-            <div className="text-4xl mb-3 opacity-50">📭</div>
-            <h2 className="text-xl font-bold text-slate-700 dark:text-slate-200">No History Yet</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">Finish a game to see your stats here.</p>
+      <main className="max-w-screen-md mx-auto p-4 pt-6">
+        
+        {/* FILTERS */}
+        <div className="flex gap-3 mb-6">
+          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Game</label>
+            <select value={selectedGame} onChange={(e) => setSelectedGame(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none">
+              <option value="ALL">All Games</option>
+              {uniqueGames.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
           </div>
-        ) : (
-          <div>
-            
-            {/* ANALYTICS DASHBOARD */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Matches</p>
-                <div className="text-4xl font-black text-slate-800 dark:text-white">{filteredMatches.length}</div>
-              </div>
 
-              <div className="bg-blue-600 dark:bg-blue-700 p-5 rounded-3xl shadow-md text-white relative overflow-hidden">
-                <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest mb-1">{isLowWin && activeFilter !== 'All' ? 'Lowest Score' : 'High Score'}</p>
-                {bestScore ? (
-                  <>
-                    <div className="text-4xl font-black leading-none">{bestScore.score}</div>
-                    <div className="text-sm font-bold text-blue-100 mt-1 truncate">{bestScore.emoji} {bestScore.name}</div>
-                  </>
-                ) : (
-                  <div className="text-xl font-bold text-blue-200 mt-2">-</div>
-                )}
-                <div className="absolute -bottom-4 -right-2 text-6xl opacity-20">🏆</div>
+          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
+            <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none truncate">
+              <option value="ALL">All Players</option>
+              {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* COMPACTED 3-COLUMN HERO STATS */}
+        <div className="grid grid-cols-3 gap-2 mb-8">
+          
+          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-3 text-white shadow-md shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden">
+            <div className="text-blue-100 text-[10px] font-bold uppercase tracking-wider mb-2 relative z-10">Games</div>
+            <div className="text-3xl font-black relative z-10">{heroStats.totalGames}</div>
+            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🎮</div>
+          </div>
+          
+          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-3 text-white shadow-md shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden">
+            <div className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Most Wins</div>
+            {heroStats.mostWinsPlayer ? (
+               <div className="relative z-10">
+                 <div className="font-bold truncate text-xs leading-tight mb-0.5">{heroStats.mostWinsPlayer?.emoji} {heroStats.mostWinsPlayer?.name}</div>
+                 <div className="text-2xl font-black">{heroStats.mostWinsPlayer?.wins}</div>
+               </div>
+            ) : (
+               <div className="text-xs font-medium opacity-70 relative z-10">No wins</div>
+            )}
+             <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🏆</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-3 text-white shadow-md shadow-purple-500/20 flex flex-col justify-between relative overflow-hidden">
+            <div className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Highest %</div>
+            {heroStats.highestWinPctPlayer ? (
+               <div className="relative z-10">
+                 <div className="font-bold truncate text-xs leading-tight mb-0.5">{heroStats.highestWinPctPlayer?.emoji} {heroStats.highestWinPctPlayer?.name}</div>
+                 <div className="text-2xl font-black">{heroStats.highestWinPctPlayer?.pct}%</div>
+               </div>
+            ) : (
+               <div className="text-[10px] font-medium opacity-70 relative z-10 pr-2">Min {heroStats.threshold} required</div>
+            )}
+            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">📈</div>
+          </div>
+
+        </div>
+
+        {/* TIMELINE WINS GRAPH */}
+        {filteredHistory.length > 0 && (
+          <div className="mb-8">
+            <div className="flex justify-between items-end mb-3 ml-1">
+              <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                {selectedPlayer === 'ALL' ? 'Top 3 Players Timeline' : 'Player Trajectory'}
+              </h2>
+              
+              <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
+                <button onClick={() => setGraphMode('TOTAL')} className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${graphMode === 'TOTAL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Wins</button>
+                <button onClick={() => setGraphMode('PERCENTAGE')} className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${graphMode === 'PERCENTAGE' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Win %</button>
               </div>
             </div>
 
-            {rankedLeaderboard.length > 0 && (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 mb-8">
-                <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Win Leaderboard</h3>
-                <div className="flex flex-col gap-3">
-                  {/* FIX: Using player.id to prevent React Key Crash */}
-                  {rankedLeaderboard.slice(0, 5).map((player) => (
-                    <div key={player.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 text-center font-black text-slate-400 dark:text-slate-500">
-                          {player.rank === 1 ? '👑' : `#${player.rank}`}
-                        </div>
-                        <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center text-xl shadow-sm border border-slate-100 dark:border-slate-700">{player.emoji}</div>
-                        <span className="font-bold text-slate-700 dark:text-slate-200">{player.name}</span>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-black text-lg text-slate-800 dark:text-white">{player.count}</div>
-                        <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Wins</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              
+              {/* TIME RANGE TOGGLE */}
+              <div className="flex bg-slate-50 dark:bg-slate-950/50 p-1 rounded-lg mb-4 border border-slate-100 dark:border-slate-800 overflow-x-auto scrollbar-hide">
+                {['1W', '1M', '3M', '6M', '1Y', 'ALL'].map(tf => (
+                  <button 
+                    key={tf}
+                    onClick={() => setTimeFilter(tf as any)} 
+                    className={`flex-1 min-w-[40px] py-1.5 rounded-md text-[10px] font-bold transition-all ${timeFilter === tf ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >
+                    {tf === 'ALL' ? 'All Time' : tf}
+                  </button>
+                ))}
               </div>
-            )}
 
-            {/* MATCH VAULT */}
-            <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4 ml-2">Match Logs</h3>
-            <div className="flex flex-col gap-3">
-              {filteredMatches.length === 0 ? (
-                <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium">No matches found for this filter.</div>
-              ) : (
-                filteredMatches.map(match => {
-                  const isExpanded = expandedId === match.matchId;
-                  const mProfile = gameProfiles.find(p => p.name === match.gameName) || { winCondition: 'HIGH' };
-                  const mIsLowWin = mProfile.winCondition === 'LOW';
+              {/* EXPANDED VIEWBOX FIX: -40 X offset ensures 100% axis isn't cut off */}
+              <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
+                {(() => {
+                  const allScores = graphData.flatMap(d => d.points);
+                  const max = Math.max(...allScores, graphMode === 'PERCENTAGE' ? 100 : 5);
+                  const min = 0; 
+                  const range = max - min || 1;
+                  const xStep = 400 / Math.max(graphData[0]?.points.length - 1 || 1, 1);
                   
-                  let cardWinnerId: string | null = null;
-                  let cardWinningScore = mIsLowWin ? Infinity : -Infinity;
+                  const labelData = graphData.map((d, i) => {
+                    const finalY = 200 - ((d.points[d.points.length - 1] - min) / range) * 200;
+                    return { ...d, targetY: finalY, index: i };
+                  }).sort((a, b) => a.targetY - b.targetY);
                   
-                  Object.entries(match.finalScores).forEach(([pId, score]) => {
-                    if (mIsLowWin ? score < cardWinningScore : score > cardWinningScore) {
-                      cardWinningScore = score;
-                      cardWinnerId = pId;
+                  for (let i = 1; i < labelData.length; i++) {
+                    if (labelData[i].targetY - labelData[i - 1].targetY < 20) {
+                      labelData[i].targetY = labelData[i - 1].targetY + 20;
                     }
-                  });
-                  
-                  const winner = cardWinnerId ? match.playerSnapshots.find(p => p.id === cardWinnerId) : null;
-                  const sortedPlayers = [...match.playerSnapshots].sort((a, b) => 
-                    mIsLowWin ? (match.finalScores[a.id] || 0) - (match.finalScores[b.id] || 0) : (match.finalScores[b.id] || 0) - (match.finalScores[a.id] || 0)
-                  );
-
-                  // Determine if button should say Resume or Edit based on target
-                  let isCardGameOver = false;
-                  if (match.settings && match.settings.target > 0) {
-                     if (match.settings.mode === 'UP' && (!mIsLowWin ? cardWinningScore >= match.settings.target : false)) isCardGameOver = true;
-                     if (match.settings.mode === 'DOWN' && cardWinningScore <= 0) isCardGameOver = true;
                   }
 
+                  const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7'];
+
                   return (
-                    <div key={match.matchId} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                      <div onClick={() => toggleAccordion(match.matchId)} className="p-5 flex items-center justify-between cursor-pointer active:bg-slate-50 dark:active:bg-slate-800 transition-colors">
-                        <div>
-                          <div className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-1">{match.date}</div>
-                          <div className="font-black text-slate-800 dark:text-white text-lg leading-tight truncate max-w-[140px]">{match.gameName}</div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          {winner ? (
-                            <div className="text-right">
-                              <div className="text-[10px] font-bold text-blue-500 dark:text-blue-400 uppercase tracking-widest mb-0.5">Winner</div>
-                              <div className="font-black text-slate-800 dark:text-white flex items-center gap-1.5 justify-end">
-                                <span>{winner.emoji}</span> <span>{match.finalScores[winner.id]}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-slate-400 text-sm font-bold">Unfinished</div>
-                          )}
-                          <div className={`text-slate-300 dark:text-slate-600 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>▼</div>
-                        </div>
-                      </div>
+                    <>
+                      {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+                        <g key={`grid-${i}`}>
+                          <line x1="0" y1={200 - (pct * 200)} x2="400" y2={200 - (pct * 200)} stroke="#e2e8f0" strokeDasharray="4" className="dark:stroke-slate-800" />
+                          <text x="-8" y={200 - (pct * 200) + 4} fill="#94a3b8" fontSize="10" textAnchor="end" className="dark:fill-slate-600 font-bold">
+                            {Math.round(max * pct)}{graphMode === 'PERCENTAGE' ? '%' : ''}
+                          </text>
+                        </g>
+                      ))}
+                      
+                      {graphData.map((d, i) => (
+                        <polyline 
+                          key={`line-${d.id}`} 
+                          points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')} 
+                          fill="none" stroke={colors[i % colors.length]} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" 
+                          className="drop-shadow-sm" 
+                        />
+                      ))}
 
-                      {isExpanded && (
-                        <div className="bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-4">
-                          
-                          <div className="flex bg-slate-200/50 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                            <button onClick={() => setExpandedView('STANDINGS')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expandedView === 'STANDINGS' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Standings</button>
-                            <button onClick={() => setExpandedView('GRID')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expandedView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Grid</button>
-                            <button onClick={() => setExpandedView('GRAPH')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${expandedView === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Graph</button>
-                          </div>
-
-                          {expandedView === 'STANDINGS' && (
-                            <div className="flex flex-col gap-2 mb-6">
-                              {sortedPlayers.map((player, idx) => (
-                                <div key={player.id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-xs font-bold text-slate-400 w-4">{idx + 1}.</span>
-                                    <span className="text-xl">{player.emoji}</span>
-                                    <span className="font-bold text-slate-700 dark:text-slate-200">{player.name}</span>
-                                  </div>
-                                  <span className="font-black text-slate-800 dark:text-white">{match.finalScores[player.id]} pts</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {expandedView === 'GRID' && (
-                            <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm mb-6">
-                              <table className="w-full text-center border-collapse text-sm">
-                                <thead className="bg-slate-100 dark:bg-slate-800 border-b dark:border-slate-800">
-                                  <tr>
-                                    <th className="p-2 text-slate-500 dark:text-slate-400 font-normal text-xs w-10">Rnd</th>
-                                    {match.playerSnapshots.map(p => (
-                                      <th key={p.id} className="p-2 font-semibold min-w-[60px]">
-                                        <div className="text-lg">{p.emoji}</div>
-                                        <div className="text-[10px] truncate uppercase">{p.name}</div>
-                                      </th>
-                                    ))}
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {match.savedRounds.map(r => (
-                                    <tr key={r.roundId} className="border-b dark:border-slate-800">
-                                      <td className="p-2 border-r dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-500 font-bold text-xs">{r.roundId}</td>
-                                      {match.playerSnapshots.map(p => (
-                                        <td key={p.id} className="p-2 font-medium">{r.scores[p.id] !== undefined ? r.scores[p.id] : '-'}</td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-
-                          {expandedView === 'GRAPH' && (
-                            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm mb-6">
-                              <svg viewBox="0 0 400 200" className="w-full h-auto overflow-visible mb-4">
-                                {(() => {
-                                  const pointsData = match.playerSnapshots.map((p, i) => {
-                                    let runningTotal = match.settings?.mode === 'DOWN' ? (match.settings?.target || 0) : 0;
-                                    const points = [runningTotal];
-                                    match.savedRounds.forEach(r => {
-                                      if (match.settings?.mode === 'DOWN') runningTotal -= (r.scores[p.id] || 0);
-                                      else runningTotal += (r.scores[p.id] || 0);
-                                      points.push(runningTotal);
-                                    });
-                                    return { color: LINE_COLORS[i % LINE_COLORS.length], points };
-                                  });
-                                  const allScores = pointsData.flatMap(d => d.points);
-                                  const max = Math.max(...allScores, 10); const min = Math.min(...allScores, 0); const range = max - min || 1;
-                                  return (
-                                    <>
-                                      {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" />}
-                                      {pointsData.map((d, i) => (
-                                        <polyline key={i} points={d.points.map((s, idx) => `${(idx / match.savedRounds.length) * 400},${200 - ((s - min) / range) * 200}`).join(' ')} fill="none" stroke={d.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                                      ))}
-                                    </>
-                                  );
-                                })()}
-                              </svg>
-                              <div className="flex flex-wrap gap-2 justify-center">
-                                {match.playerSnapshots.map((p, i) => (
-                                  <div key={p.id} className="flex items-center gap-1.5 text-[10px] font-bold">
-                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: LINE_COLORS[i % LINE_COLORS.length] }}></div>
-                                    <span>{p.emoji} {p.name}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="flex gap-2">
-                            <button onClick={() => resumeMatch(match)} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold shadow-md shadow-blue-100 dark:shadow-none active:scale-95 transition-all flex justify-center items-center gap-2">
-                              {isCardGameOver ? '✏️ Edit Game' : '▶️ Resume'}
-                            </button>
-                            <button onClick={() => deleteMatch(match.matchId)} className="w-14 bg-white dark:bg-slate-800 border border-red-100 dark:border-red-900/30 text-red-500 rounded-xl flex items-center justify-center text-xl active:bg-red-50 dark:active:bg-red-900/20 transition-colors shadow-sm">
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                      {labelData.map((d, i) => (
+                         <text key={`label-${d.id}`} x="408" y={d.targetY + 5} fontSize="12" className="font-bold" fill={colors[i % colors.length]}>
+                           {d.emoji} {d.name.substring(0,6)}
+                         </text>
+                      ))}
+                    </>
                   );
-                })
-              )}
+                })()}
+              </svg>
             </div>
           </div>
         )}
-      </div>
-    </main>
+
+        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-1">
+          Match Feed
+        </h2>
+        
+        {filteredHistory.length === 0 ? (
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8 text-center text-slate-500 font-medium border border-slate-200 dark:border-slate-700 border-dashed">
+            No games found for this filter combination.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {filteredHistory.map((game, index) => (
+              <GameCard 
+                key={`${game.gameId}-${index}`}
+                game={game} 
+                isExpanded={expandedGameId === game.gameId}
+                onToggle={() => setExpandedGameId(prev => prev === game.gameId ? null : game.gameId)}
+                onDelete={handleDeleteGame}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+
+      <BottomNav />
+    </div>
   );
 }
