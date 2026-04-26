@@ -13,7 +13,7 @@ type PlayerSnapshot = { id: string; name: string; emoji: string };
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number };
 
-type GameRecord = {
+type MatchRecord = {
   matchId: string;
   date: string;
   gameName: string;
@@ -26,16 +26,22 @@ type GameRecord = {
 
 // --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
-const EMOJI_COLORS: Record<string, string> = { '🦊': '#f97316', '⚡️': '#eab308', '🦖': '#22c55e', '🤠': '#8b5cf6', '👾': '#a855f7', '🍕': '#ef4444', '🚀': '#3b82f6', '🐙': '#ec4899', '🦄': '#d946ef', '🥑': '#84cc16', '🔥': '#dc2626', '💎': '#06b6d4', '👻': '#94a3b8', '👑': '#fbbf24', '😎': '#38bdf8', '🤖': '#64748b', '👽': '#10b981', '🐶': '#d97706', '🐱': '#f59e0b', '🐼': '#1e293b' };
+const EMOJI_COLORS: Record<string, string> = {
+  '🦊': '#f97316', '⚡️': '#eab308', '🦖': '#22c55e', '🤠': '#8b5cf6', 
+  '👾': '#a855f7', '🍕': '#ef4444', '🚀': '#3b82f6', '🐙': '#ec4899', 
+  '🦄': '#d946ef', '🥑': '#84cc16', '🔥': '#dc2626', '💎': '#06b6d4', 
+  '👻': '#94a3b8', '👑': '#fbbf24', '😎': '#38bdf8', '🤖': '#64748b',
+  '👽': '#10b981', '🐶': '#d97706', '🐱': '#f59e0b', '🐼': '#1e293b'
+};
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 const getPlayerColor = (emoji: string) => EMOJI_COLORS[emoji] || '#3b82f6';
 
-export default function CustomGame() {
+export default function CustomTracker() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
-  const [matchHistory, setMatchHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
   
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
   const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
@@ -61,6 +67,7 @@ export default function CustomGame() {
 
   const router = useRouter();
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
+  
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
   useEffect(() => {
@@ -72,14 +79,6 @@ export default function CustomGame() {
     }
   }, []);
 
-  // --- AUTO EDIT FEATURE ---
-  useEffect(() => {
-    if (viewMode === 'SETUP' && activeGameName === 'Custom Game' && players.length === 0 && (!settings.target || settings.target === 0)) {
-      setIsEditingGameName(true);
-      setEditNameInput('');
-    }
-  }, [viewMode, activeGameName, players.length, settings.target]);
-
   const calculateTotal = (pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
@@ -89,37 +88,28 @@ export default function CustomGame() {
     rounds[rounds.length - 1].scores[p.id] !== undefined && rounds[rounds.length - 1].scores[p.id] !== null
   );
 
-  // --- DECOUPLED END-GAME AND WIN LOGIC ---
   const { isGameOver, currentWinner } = useMemo(() => {
     if (!settings.target || settings.target <= 0 || !isRoundComplete) return { isGameOver: false, currentWinner: null };
     
-    let isTriggered = false;
-
-    // 1. Check End-Game Trigger (Score Direction)
-    players.forEach(p => {
-      const total = calculateTotal(p.id);
-      if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isTriggered = true;
-      if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isTriggered = true;
-    });
-
-    if (!isTriggered) return { isGameOver: false, currentWinner: null };
-
-    // 2. Determine Winner (Win Condition)
+    let over = false;
     let winnerId: string | null = null;
-    let bestScore = activeProfile.winCondition === 'LOW' ? Infinity : -Infinity;
+    let bestScore = activeProfile.scoreDirection === 'DOWN' ? Infinity : -Infinity;
 
     players.forEach(p => {
       const total = calculateTotal(p.id);
-      if (activeProfile.winCondition === 'LOW') {
-        if (total < bestScore) { bestScore = total; winnerId = p.id; }
-      } else {
+      if (activeProfile.scoreDirection === 'UP' && total >= settings.target) {
+        over = true;
         if (total > bestScore) { bestScore = total; winnerId = p.id; }
+      }
+      if (activeProfile.scoreDirection === 'DOWN' && total <= 0) {
+        over = true;
+        if (total < bestScore) { bestScore = total; winnerId = p.id; }
       }
     });
 
     const winningPlayer = players.find(p => p.id === winnerId);
-    return { isGameOver: true, currentWinner: winningPlayer || null };
-  }, [rounds, players, settings.target, activeProfile, isRoundComplete]);
+    return { isGameOver: over, currentWinner: winningPlayer };
+  }, [rounds, players, settings.target, activeProfile.scoreDirection, isRoundComplete]);
 
   useEffect(() => {
     if (players.length === 0 || rounds.length === 0 || isGameOver) return;
@@ -244,7 +234,7 @@ export default function CustomGame() {
     const matchIdToUse = activeMatchId || Date.now().toString();
     if (!activeMatchId) setActiveMatchId(matchIdToUse);
 
-    const newMatch: GameRecord = {
+    const newMatch: MatchRecord = {
       matchId: matchIdToUse,
       date: new Date().toLocaleDateString(),
       gameName: activeGameName,
@@ -274,18 +264,9 @@ export default function CustomGame() {
     setInputValue('0');
   };
 
-  // --- TRUE SAVE & CLOSE TEARDOWN ---
   const handleSaveAndClose = () => {
     saveGame();
-    // Complete session wipe so 'Resume' button disappears globally
-    setPlayers([]);
-    setRounds([{ roundId: 1, scores: {} }]);
-    setActiveMatchId(null);
-    setHasCelebrated(false);
-    setActiveCell(null);
-    setInputValue('0');
-    setSettings({ target: 0 });
-    setActiveGameName('Custom Game');
+    clearSetup();
     router.push('/');
   };
 
@@ -330,18 +311,19 @@ export default function CustomGame() {
             </div>
           ))}
           <style dangerouslySetInnerHTML={{__html: `
-            @keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotate(360deg); opacity: 0; } }
+            @keyframes fall {
+              0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+              100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+            }
             .animate-fall { animation-name: fall; animation-timing-function: linear; }
           `}} />
         </div>
       )}
 
       {viewMode === 'SETUP' && (
-        {/* SETUP VIEW REMAINS UNCHANGED - COLLAPSED FOR BREVITY */}
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
-            
             <button 
               onClick={() => setViewMode('GRID')} 
               disabled={players.length === 0}
@@ -360,7 +342,7 @@ export default function CustomGame() {
               {gameProfiles.map(profile => (
                 <button 
                   key={profile.name} 
-                  onClick={() => { setActiveGameName(profile.name); setIsEditingGameName(false); }} 
+                  onClick={() => setActiveGameName(profile.name)} 
                   className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-800 dark:border-slate-100 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
                 >
                   {profile.name}
@@ -378,14 +360,14 @@ export default function CustomGame() {
               <div className="flex items-center gap-2 mb-6">
                  {isEditingGameName ? (
                     <div className="flex w-full gap-2 animate-in slide-in-from-left-2">
-                       <input type="text" placeholder="Enter Game Name..." value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold dark:text-white" autoFocus />
+                       <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold dark:text-white" autoFocus />
                        <button onClick={handleEditGameName} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Save</button>
                        <button onClick={() => setIsEditingGameName(false)} className="bg-slate-200 dark:bg-slate-800 px-4 rounded-xl font-bold text-slate-600 dark:text-slate-300">✕</button>
                     </div>
                  ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-black text-slate-800 dark:text-white px-2">{activeGameName}</span>
-                      <button onClick={() => { setEditNameInput(activeGameName === 'Custom Game' ? '' : activeGameName); setIsEditingGameName(true); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">✏️</button>
+                      <button onClick={() => { setEditNameInput(activeGameName); setIsEditingGameName(true); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">✏️</button>
                     </div>
                  )}
               </div>
@@ -416,7 +398,7 @@ export default function CustomGame() {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Game Target</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Match Target</label>
                 <input 
                   type="number" 
                   value={settings.target || ''} 
@@ -427,7 +409,7 @@ export default function CustomGame() {
               </div>
             </div>
             
-            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Game</h2>
+            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Current Match</h2>
             <div className="flex gap-2 mb-4">
               <input type="text" placeholder="Type name to add..." className="border-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:border-blue-500 outline-none font-medium dark:text-white" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} />
               <button onClick={addPlayer} className="bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 px-5 py-3 rounded-xl font-bold active:scale-95 transition">+ Add</button>
@@ -560,14 +542,13 @@ export default function CustomGame() {
                         <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50">Tot</td>
                         {players.map((p) => {
                           const total = calculateTotal(p.id);
-                          // Determine if this total crossed the threshold
-                          let thresholdCrossed = false;
+                          let isWinner = false;
                           if (settings.target > 0) {
-                            if (activeProfile.scoreDirection === 'UP' && total >= settings.target) thresholdCrossed = true;
-                            if (activeProfile.scoreDirection === 'DOWN' && total <= 0) thresholdCrossed = true;
+                            if (activeProfile.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
+                            if (activeProfile.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
                           }
                           return (
-                            <td key={p.id} className={`p-4 font-black text-xl ${thresholdCrossed && isRoundComplete ? 'text-green-400' : ''}`}>
+                            <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
                               {total}
                             </td>
                           );
@@ -611,7 +592,6 @@ export default function CustomGame() {
             )}
             
             {viewMode === 'GRAPH' && (
-              {/* GRAPH COMPONENT REMAINS UNCHANGED - COLLAPSED FOR BREVITY */}
               <div className="animate-in fade-in">
                 <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
                   {players.map(p => (
