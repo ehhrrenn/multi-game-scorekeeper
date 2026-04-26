@@ -114,7 +114,11 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
-      
+
+      {/* 🟢 NEW CLOUD LOGIN HEADER - Pushes button to top right */}
+      <header className="max-w-screen-md mx-auto px-4 pt-4 flex justify-end z-50 relative">
+        <AuthButton />
+      </header>
       {/* STICKY HEADER */}
       <div className={`fixed top-0 left-0 right-0 h-16 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 transition-all duration-300 flex items-center px-4 max-w-screen-md mx-auto ${isScrolled ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
         <div className="flex items-center gap-2">
