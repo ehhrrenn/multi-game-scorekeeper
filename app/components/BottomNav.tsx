@@ -1,15 +1,28 @@
 // app/components/BottomNav.tsx
 'use client';
 
+import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useGameState } from '../../hooks/useGameState';
 
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
+  const [hasActiveGame, setHasActiveGame] = useState(false);
 
-  // Check if there is an active game in memory
-  const [activeGameId] = useGameState<string | null>('scorekeeper_active_game_id', null);
+  // Force the Nav Bar to check local storage every time the page changes
+  useEffect(() => {
+    const checkActiveGame = () => {
+      const activeId = window.localStorage.getItem('scorekeeper_active_game_id');
+      // If activeId exists and isn't literally the string "null", show the button
+      setHasActiveGame(!!activeId && activeId !== 'null' && activeId !== '""');
+    };
+
+    checkActiveGame();
+    
+    // Fallback: Listen for cross-tab storage changes
+    window.addEventListener('storage', checkActiveGame);
+    return () => window.removeEventListener('storage', checkActiveGame);
+  }, [pathname]);
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-screen-md px-4 pointer-events-none flex justify-center">
@@ -41,8 +54,8 @@ export default function BottomNav() {
           <span className={`text-[10px] uppercase tracking-wider ${pathname.includes('/history') ? 'font-bold' : 'font-medium'}`}>History</span>
         </button>
 
-        {/* Dynamic Resume Button (Evenly spaced on the right) */}
-        {activeGameId && (
+        {/* Dynamic Resume Button */}
+        {hasActiveGame && (
           <div className="pl-4 sm:pl-6 border-l border-slate-200 dark:border-slate-700 flex items-center animate-in slide-in-from-right-4 fade-in duration-300">
             <button 
               onClick={() => router.push('/custom')}
