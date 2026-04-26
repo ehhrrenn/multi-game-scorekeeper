@@ -11,6 +11,15 @@ type PlayerSnapshot = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
+type HeroStat = { wins: number; played: number; name: string; emoji: string };
+type HeroStatWithPct = HeroStat & { pct: number };
+type HeroStats = {
+  totalGames: number;
+  mostWinsPlayer: HeroStat | null;
+  highestWinPctPlayer: HeroStatWithPct | null;
+  threshold: number;
+};
+
 export type GameRecord = {
   gameId: string;
   date: string;
@@ -119,7 +128,7 @@ export default function HistoryPage() {
     });
   }, [filteredHistory, selectedPlayer, uniquePlayers, graphMode, timeFilter]);
 
-  const heroStats = useMemo(() => {
+  const heroStats = useMemo<HeroStats>(() => {
     const totalGames = filteredHistory.length;
     
     const playerStats: Record<string, { wins: number; played: number; name: string; emoji: string }> = {};
