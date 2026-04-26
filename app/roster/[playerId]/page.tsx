@@ -11,7 +11,7 @@ type PlayerSnapshot = { id: string; name: string; emoji: string };
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number };
 
-type MatchRecord = {
+type GameRecord = {
   matchId: string;
   date: string;
   gameName: string;
@@ -24,8 +24,8 @@ type MatchRecord = {
 
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 
-function rankInGame(match: MatchRecord, playerId: string, isLowWin: boolean): number | null {
-  const sorted = Object.entries(match.finalScores)
+function rankInGame(game: GameRecord, playerId: string, isLowWin: boolean): number | null {
+  const sorted = Object.entries(game.finalScores)
     .sort(([, a], [, b]) => isLowWin ? a - b : b - a)
     .map(([id]) => id);
   const index = sorted.indexOf(playerId);
@@ -38,7 +38,7 @@ export default function PlayerDetailPage() {
 
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [activePlayers, setActivePlayers] = useGameState<Player[]>('scorekeeper_players', []);
-  const [history, setHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
+  const [history, setHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', []);
 
   const rosterPlayer = globalRoster.find(p => p.id === playerId);
@@ -49,39 +49,41 @@ export default function PlayerDetailPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // Game Filter State
   const [filterGame, setFilterGame] = useState<string | 'ALL'>('ALL');
 
   useEffect(() => {
-    if (rosterPlayer) {
+    if (rosterPlayer && !isEditing) {
       setEditName(rosterPlayer.name);
       setEditEmoji(rosterPlayer.emoji);
     }
-  }, [rosterPlayer]);
+  }, [rosterPlayer, isEditing]);
 
-  const games = useMemo(() => {
+  const allGames = useMemo(() => {
     return history
-      .filter(match => match.activePlayerIds.includes(playerId as string))
-      .map(match => {
-        const profile = gameProfiles.find(p => p.name === match.gameName) || { winCondition: 'HIGH' };
+      .filter(game => game.activePlayerIds.includes(playerId as string))
+      .map(game => {
+        const profile = gameProfiles.find(p => p.name === game.gameName) || { winCondition: 'HIGH' };
         return {
-          gameId: match.matchId,
-          date: match.date,
-          gameName: match.gameName,
-          score: match.finalScores[playerId as string] || 0,
-          rank: rankInGame(match, playerId as string, profile.winCondition === 'LOW'),
-          totalPlayersInGame: Object.keys(match.finalScores).length
+          gameId: game.matchId,
+          date: game.date,
+          gameName: game.gameName,
+          score: game.finalScores[playerId as string] || 0,
+          rank: rankInGame(game, playerId as string, profile.winCondition === 'LOW'),
+          totalPlayersInGame: Object.keys(game.finalScores).length
         };
       });
   }, [history, playerId, gameProfiles]);
 
-  const uniqueGames = Array.from(new Set(games.map(g => g.gameName)));
-  const filteredGames = filterGame === 'ALL' ? games : games.filter(g => g.gameName === filterGame);
-
-  const graphData = useMemo(() => [...games].reverse().map(g => g.score), [games]);
+  const uniqueGames = Array.from(new Set(allGames.map(g => g.gameName)));
   
-  const totalWins = games.filter(g => g.rank === 1).length;
-  const lastPlaces = games.filter(g => g.rank !== null && g.rank === g.totalPlayersInGame && g.totalPlayersInGame > 1).length;
+  // --- UNIVERSAL FILTER ROUTING ---
+  // This filtered array now drives the log, the stats, and the graph.
+  const filteredGames = filterGame === 'ALL' ? allGames : allGames.filter(g => g.gameName === filterGame);
+
+  const graphData = useMemo(() => [...filteredGames].reverse().map(g => g.score), [filteredGames]);
+  
+  const totalWins = filteredGames.filter(g => g.rank === 1).length;
+  const lastPlaces = filteredGames.filter(g => g.rank !== null && g.rank === g.totalPlayersInGame && g.totalPlayersInGame > 1).length;
 
   const width = 400; const height = 120;
   const max = Math.max(...graphData, 10); const min = Math.min(...graphData, 0); const range = max - min || 1;
@@ -96,9 +98,9 @@ export default function PlayerDetailPage() {
     const trimmed = editName.trim() || 'Unknown';
     setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p));
     setActivePlayers(activePlayers.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p));
-    setHistory(history.map(match => ({
-      ...match,
-      playerSnapshots: match.playerSnapshots.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p)
+    setHistory(history.map(game => ({
+      ...game,
+      playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p)
     })));
     setIsEditing(false);
   };
@@ -114,7 +116,6 @@ export default function PlayerDetailPage() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* FLOATING DELETE MODAL */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
@@ -136,7 +137,6 @@ export default function PlayerDetailPage() {
         </div>
       )}
 
-      {/* UNIFIED HEADER */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
         <h1 className="text-xl font-black text-slate-800 dark:text-white">Player Profile</h1>
         <div className="flex gap-2">
@@ -156,7 +156,6 @@ export default function PlayerDetailPage() {
 
       <div className="pt-[88px] px-4 max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2">
 
-        {/* BOLD PLAYER DASHBOARD */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden mb-8">
           <div className="absolute -right-6 -bottom-6 text-9xl opacity-[0.03] dark:opacity-5 select-none pointer-events-none">
             {isEditing ? editEmoji : rosterPlayer.emoji}
@@ -195,7 +194,7 @@ export default function PlayerDetailPage() {
           <div className="grid grid-cols-3 gap-3 mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
              <div className="text-center">
                 <div className="text-2xl mb-1">🎲</div>
-                <div className="font-black text-xl text-slate-800 dark:text-white">{games.length}</div>
+                <div className="font-black text-xl text-slate-800 dark:text-white">{filteredGames.length}</div>
                 <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Games</div>
              </div>
              <div className="text-center border-l border-slate-100 dark:border-slate-800">
@@ -211,7 +210,6 @@ export default function PlayerDetailPage() {
           </div>
         </div>
 
-        {/* PERFORMANCE GRAPH */}
         {graphData.length > 1 && (
           <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mb-8">
             <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Score Trend</h3>
@@ -221,14 +219,13 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* GAME LOG FILTERS */}
         <div className="flex justify-between items-end mb-3 ml-1">
            <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
              Game History
            </h2>
         </div>
         
-        {games.length > 0 && (
+        {allGames.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
             <button onClick={() => setFilterGame('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === 'ALL' ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
               All Games
@@ -241,7 +238,6 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {/* LOG CARDS (With Last Place Tag) */}
         <div className="grid gap-3 pb-8">
           {filteredGames.length === 0 ? (
             <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium">No games match this filter.</div>
