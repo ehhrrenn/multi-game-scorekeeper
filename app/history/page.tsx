@@ -1,17 +1,19 @@
 // app/history/page.tsx
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState';
 import BottomNav from '../components/BottomNav';
 import GameCard from '../components/GameCard';
 
 // --- Types ---
-type PlayerSnapshot = { id: string; name: string; emoji: string };
+type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
-type HeroStat = { wins: number; played: number; name: string; emoji: string };
+type HeroStat = { wins: number; played: number; name: string; emoji: string; photoURL?: string };
 type HeroStatWithPct = HeroStat & { pct: number };
 type HeroStats = {
   totalGames: number;
@@ -32,7 +34,12 @@ export type GameRecord = {
 };
 
 export default function HistoryPage() {
-  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  // 1. Cloud State
+  const [cloudHistory, setCloudHistory] = useState<GameRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // 2. Local State (Legacy Fallback)
+  const [localHistory, setLocalHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
   // --- Filters & Toggles ---
   const [selectedGame, setSelectedGame] = useState<string>('ALL');
@@ -41,24 +48,53 @@ export default function HistoryPage() {
   const [timeFilter, setTimeFilter] = useState<'1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL'>('ALL');
   const [expandedGameId, setExpandedGameId] = useState<string | null>(null);
 
-  const uniqueGames = useMemo(() => Array.from(new Set(gameHistory.map(g => g.gameName))), [gameHistory]);
+  // 3. Fetch from Firestore
+  useEffect(() => {
+    async function fetchCloudHistory() {
+      try {
+        const gamesSnapshot = await getDocs(collection(db, 'Games'));
+        const fetchedGames = gamesSnapshot.docs.map(doc => doc.data() as GameRecord);
+        setCloudHistory(fetchedGames);
+      } catch (error) {
+        console.error("Error fetching games from Firebase:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCloudHistory();
+  }, []);
+
+  // 4. Merge Data Models safely
+  const allHistory = useMemo(() => {
+    const combined = [...localHistory, ...cloudHistory].map(game => ({
+      ...game,
+      // Sanitize corrupted arrays from past merges
+      activePlayerIds: Array.from(new Set(game.activePlayerIds))
+    }));
+    
+    // Deduplicate by gameId and sort by date (Newest first for the feed)
+    return Array.from(new Map(combined.map(h => [h.gameId, h])).values())
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [localHistory, cloudHistory]);
+
+  const uniqueGames = useMemo(() => Array.from(new Set(allHistory.map(g => g.gameName))), [allHistory]);
   const uniquePlayers = useMemo(() => {
     const players = new Map<string, PlayerSnapshot>();
-    gameHistory.forEach(game => {
-      game.playerSnapshots.forEach(p => {
+    allHistory.forEach(game => {
+      game.playerSnapshots?.forEach(p => {
         if (!players.has(p.id)) players.set(p.id, p);
       });
     });
     return Array.from(players.values());
-  }, [gameHistory]);
+  }, [allHistory]);
 
   const filteredHistory = useMemo(() => {
-    return gameHistory.filter(game => {
+    return allHistory.filter(game => {
       const matchGame = selectedGame === 'ALL' || game.gameName === selectedGame;
       const matchPlayer = selectedPlayer === 'ALL' || game.activePlayerIds.includes(selectedPlayer);
       return matchGame && matchPlayer;
     });
-  }, [gameHistory, selectedGame, selectedPlayer]);
+  }, [allHistory, selectedGame, selectedPlayer]);
 
   const getWinnerIds = (game: GameRecord) => {
     const isCountDown = game.settings?.scoreDirection === 'DOWN';
@@ -77,20 +113,23 @@ export default function HistoryPage() {
   };
 
   const handleDeleteGame = (gameIdToDelete: string) => {
-    setGameHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
+    // Note: To fully support cloud deletion, you will eventually add a deleteDoc() call here.
+    setLocalHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
+    setCloudHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
     if (expandedGameId === gameIdToDelete) setExpandedGameId(null);
   };
 
   // --- Graph Data Calculation with Time Filter ---
   const graphData = useMemo(() => {
-    let chronologicalHistory = [...filteredHistory].sort((a, b) => parseInt(a.gameId) - parseInt(b.gameId));
+    // Note: We parse the game.date instead of game.gameId to support Cloud String IDs safely
+    let chronologicalHistory = [...filteredHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-    // Apply Time Filter (gameId is an exact epoch timestamp!)
+    // Apply Time Filter
     if (timeFilter !== 'ALL') {
       const now = Date.now();
       const ranges = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
       const cutoff = now - (ranges[timeFilter] * 24 * 60 * 60 * 1000);
-      chronologicalHistory = chronologicalHistory.filter(game => parseInt(game.gameId) >= cutoff);
+      chronologicalHistory = chronologicalHistory.filter(game => new Date(game.date).getTime() >= cutoff);
     }
 
     let playersToChart: PlayerSnapshot[] = [];
@@ -131,8 +170,8 @@ export default function HistoryPage() {
   const heroStats = useMemo<HeroStats>(() => {
     const totalGames = filteredHistory.length;
     
-    const playerStats: Record<string, { wins: number; played: number; name: string; emoji: string }> = {};
-    uniquePlayers.forEach(p => { playerStats[p.id] = { wins: 0, played: 0, name: p.name, emoji: p.emoji }; });
+    const playerStats: Record<string, HeroStat> = {};
+    uniquePlayers.forEach(p => { playerStats[p.id] = { wins: 0, played: 0, name: p.name, emoji: p.emoji, photoURL: p.photoURL }; });
 
     filteredHistory.forEach(game => {
       const winners = getWinnerIds(game);
@@ -144,11 +183,8 @@ export default function HistoryPage() {
       });
     });
 
-    type PlayerStat = { wins: number; played: number; name: string; emoji: string };
-    type PlayerStatWithPct = PlayerStat & { pct: number };
-
-    let mostWinsPlayer: PlayerStat | null = null;
-    let highestWinPctPlayer: PlayerStatWithPct | null = null;
+    let mostWinsPlayer: HeroStat | null = null;
+    let highestWinPctPlayer: HeroStatWithPct | null = null;
     
     let maxWins = 0;
     let maxWinPct = -1;
@@ -172,6 +208,14 @@ export default function HistoryPage() {
     return { totalGames, mostWinsPlayer, highestWinPctPlayer, threshold };
   }, [filteredHistory, uniquePlayers]);
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
@@ -179,7 +223,7 @@ export default function HistoryPage() {
         <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-2xl font-black">History Vault</h1>
           <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
-            {gameHistory.length} Total Logs
+            {allHistory.length} Total Logs
           </span>
         </div>
       </div>
@@ -187,23 +231,25 @@ export default function HistoryPage() {
       <main className="max-w-screen-md mx-auto p-4 pt-6">
         
         {/* FILTERS */}
-        <div className="flex gap-3 mb-6">
-          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Game</label>
-            <select value={selectedGame} onChange={(e) => setSelectedGame(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none">
-              <option value="ALL">All Games</option>
-              {uniqueGames.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
+        {allHistory.length > 0 && (
+          <div className="flex gap-3 mb-6">
+            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Game</label>
+              <select value={selectedGame} onChange={(e) => setSelectedGame(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none">
+                <option value="ALL">All Games</option>
+                {uniqueGames.map(g => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
 
-          <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
-            <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none truncate">
-              <option value="ALL">All Players</option>
-              {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
-            </select>
+            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
+              <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none truncate">
+                <option value="ALL">All Players</option>
+                {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* COMPACTED 3-COLUMN HERO STATS */}
         <div className="grid grid-cols-3 gap-2 mb-8">
@@ -217,25 +263,39 @@ export default function HistoryPage() {
           <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-3 text-white shadow-md shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden">
             <div className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Most Wins</div>
             {heroStats.mostWinsPlayer ? (
-               <div className="relative z-10">
-                 <div className="font-bold truncate text-xs leading-tight mb-0.5">{heroStats.mostWinsPlayer?.emoji} {heroStats.mostWinsPlayer?.name}</div>
-                 <div className="text-2xl font-black">{heroStats.mostWinsPlayer?.wins}</div>
+               <div className="relative z-10 flex items-center gap-2 mt-1">
+                 {heroStats.mostWinsPlayer.photoURL ? (
+                    <img src={heroStats.mostWinsPlayer.photoURL} alt="" className="w-6 h-6 rounded-full border border-white/30 object-cover" />
+                 ) : (
+                    <span className="text-lg">{heroStats.mostWinsPlayer.emoji}</span>
+                 )}
+                 <div>
+                   <div className="font-bold truncate text-[10px] leading-tight opacity-90">{heroStats.mostWinsPlayer.name.substring(0,8)}</div>
+                   <div className="text-xl font-black leading-none">{heroStats.mostWinsPlayer.wins}</div>
+                 </div>
                </div>
             ) : (
                <div className="text-xs font-medium opacity-70 relative z-10">No wins</div>
             )}
-             <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🏆</div>
+            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🏆</div>
           </div>
 
           <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-3 text-white shadow-md shadow-purple-500/20 flex flex-col justify-between relative overflow-hidden">
             <div className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Highest %</div>
             {heroStats.highestWinPctPlayer ? (
-               <div className="relative z-10">
-                 <div className="font-bold truncate text-xs leading-tight mb-0.5">{heroStats.highestWinPctPlayer?.emoji} {heroStats.highestWinPctPlayer?.name}</div>
-                 <div className="text-2xl font-black">{heroStats.highestWinPctPlayer?.pct}%</div>
+               <div className="relative z-10 flex items-center gap-2 mt-1">
+                 {heroStats.highestWinPctPlayer.photoURL ? (
+                    <img src={heroStats.highestWinPctPlayer.photoURL} alt="" className="w-6 h-6 rounded-full border border-white/30 object-cover" />
+                 ) : (
+                    <span className="text-lg">{heroStats.highestWinPctPlayer.emoji}</span>
+                 )}
+                 <div>
+                   <div className="font-bold truncate text-[10px] leading-tight opacity-90">{heroStats.highestWinPctPlayer.name.substring(0,8)}</div>
+                   <div className="text-xl font-black leading-none">{heroStats.highestWinPctPlayer.pct}%</div>
+                 </div>
                </div>
             ) : (
-               <div className="text-[10px] font-medium opacity-70 relative z-10 pr-2">Min {heroStats.threshold} required</div>
+               <div className="text-[10px] font-medium opacity-70 relative z-10 pr-2 leading-tight">Min {heroStats.threshold} required</div>
             )}
             <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">📈</div>
           </div>
@@ -332,7 +392,7 @@ export default function HistoryPage() {
         
         {filteredHistory.length === 0 ? (
           <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8 text-center text-slate-500 font-medium border border-slate-200 dark:border-slate-700 border-dashed">
-            No games found for this filter combination.
+            {allHistory.length === 0 ? 'No games found in the vault.' : 'No games found for this filter combination.'}
           </div>
         ) : (
           <div className="flex flex-col gap-3">

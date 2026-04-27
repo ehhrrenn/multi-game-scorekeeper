@@ -4,6 +4,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string };
@@ -277,10 +279,47 @@ export default function CustomTracker() {
     setInputValue('0');
   };
 
-  const handleSaveAndClose = () => {
-    saveGame();
-    clearSetup();
-    router.push('/');
+  const handleSaveAndClose = async () => {
+    if (players.length === 0) {
+      router.push('/');
+      return;
+    }
+
+    // Generate a unique ID for this specific game
+    const newGameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const finalScores: Record<string, number> = {};
+    players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
+
+    const gameRecord: GameRecord = {
+      gameId: newGameId, // <-- Using the new gameId
+      date: new Date().toISOString(),
+      gameName: activeGameName,
+      finalScores,
+      activePlayerIds: players.map(p => p.id),
+      savedRounds: JSON.parse(JSON.stringify(rounds)),
+      playerSnapshots: players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji })),
+      settings: { ...settings }
+    };
+
+    // 1. Legacy Save (Keeps your app snappy & acts as offline backup)
+    setGameHistory(prev => [gameRecord, ...prev]);
+
+    // 2. Cloud Save (The Magic)
+    try {
+      // We use setDoc here to force the Document ID to exactly match your gameRecord.gameId
+      await setDoc(doc(db, 'Games', gameRecord.gameId), gameRecord);
+      console.log("Game successfully written to Cloud!");
+    } catch (error) {
+      console.error("Error saving game to Cloud:", error);
+    }
+
+    // 3. Teardown Active Game State
+    setPlayers([]);
+    setRounds([{ roundId: 1, scores: {} }]);
+    setActiveGameId(null);
+    setHasCelebrated(false);
+    router.push('/history');
   };
 
   const handleCellTap = (roundId: number, playerId: string) => {
