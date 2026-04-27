@@ -4,12 +4,12 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyARSSvXpCwemlCLnVmiueEaEeKpEjUEZhY",
-  authDomain: "game-scorekeeper-54f72.firebaseapp.com",
-  projectId: "game-scorekeeper-54f72",
-  storageBucket: "game-scorekeeper-54f72.firebasestorage.app",
-  messagingSenderId: "1098830396762",
-  appId: "1:1098830396762:web:9ba9183034530dc2ae8763"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 // Initialize Firebase (This pattern prevents re-initialization errors during Next.js hot reloads)
