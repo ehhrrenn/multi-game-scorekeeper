@@ -3,9 +3,10 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { useGameState } from '../../../hooks/useGameState';
+import { useAuth } from '../../../hooks/useAuth';
 import BottomNav from '../../components/BottomNav';
 import GameCard, { GameRecord } from '../../components/GameCard';
 
@@ -19,6 +20,10 @@ export default function PlayerProfilePage() {
   const params = useParams();
   const router = useRouter();
   const playerId = decodeURIComponent(params.playerId as string);
+  
+  // Auth & Admin Check
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.uid === process.env.NEXT_PUBLIC_ADMIN_UID;
 
   // 1. Data State (Cloud + Local)
   const [cloudPlayer, setCloudPlayer] = useState<Player | null>(null);
@@ -39,6 +44,12 @@ export default function PlayerProfilePage() {
   const [editEmoji, setEditEmoji] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Admin Merge State
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [allCloudUsers, setAllCloudUsers] = useState<Player[]>([]);
+  const [targetMergeId, setTargetMergeId] = useState<string>('');
+  const [isMerging, setIsMerging] = useState(false);
 
   // 3. Fetch Cloud Data
   useEffect(() => {
@@ -86,8 +97,6 @@ export default function PlayerProfilePage() {
   // 5. Filtering & Analytics Engine
   const uniqueGames = useMemo(() => Array.from(new Set(allHistory.map(g => g.gameName))), [allHistory]);
   
-  // --- UNIVERSAL FILTER ---
-  // Drives the stats, the graph, and the feed
   const filteredGames = useMemo(() => {
     if (filterGame === 'ALL') return allHistory;
     return allHistory.filter(g => g.gameName === filterGame);
@@ -129,16 +138,12 @@ export default function PlayerProfilePage() {
       gamesPlayed: filteredGames.length,
       wins,
       lastPlaces,
-      graphData: scoresForGraph.reverse() // Oldest to newest for the graph
+      graphData: scoresForGraph.reverse() 
     };
   }, [filteredGames, gameProfiles, playerId]);
 
-  // Graph Layout variables
-  const width = 400; 
-  const height = 120;
-  const max = Math.max(...stats.graphData, 10); 
-  const min = Math.min(...stats.graphData, 0); 
-  const range = max - min || 1;
+  const width = 400; const height = 120;
+  const max = Math.max(...stats.graphData, 10); const min = Math.min(...stats.graphData, 0); const range = max - min || 1;
 
   // Handlers
   const handleEditClick = () => setIsEditing(true);
@@ -146,19 +151,93 @@ export default function PlayerProfilePage() {
   const handleSave = () => {
     const trimmed = editName.trim() || 'Unknown';
     setLocalPlayers(localPlayers.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p));
-    // Note: To sync edit to cloud, add a setDoc to Firebase 'Users' collection here later
     setIsEditing(false);
   };
 
   const handleDelete = () => {
     setLocalPlayers(localPlayers.filter(p => p.id !== playerId));
-    // Note: To sync delete to cloud, add a deleteDoc here later
     router.push('/roster');
   };
 
   const handleDeleteGame = (gameId: string) => {
     setLocalHistory(prev => prev.filter(game => game.gameId !== gameId));
     setCloudHistory(prev => prev.filter(game => game.gameId !== gameId));
+  };
+
+  // --- ADMIN MERGE LOGIC ---
+  const handleOpenMergeModal = async () => {
+    setShowMergeModal(true);
+    // Fetch target users
+    const usersSnap = await getDocs(collection(db, 'Users'));
+    setAllCloudUsers(usersSnap.docs.map(d => d.data() as Player).filter(p => p.id !== playerId));
+  };
+
+  const executeMerge = async () => {
+    if (!targetMergeId) return;
+    setIsMerging(true);
+
+    try {
+      // 1. Setup a Firestore Batch
+      const batch = writeBatch(db);
+
+      // 2. Query all cloud games for the old ID
+      const gamesRef = collection(db, 'Games');
+      const q = query(gamesRef, where('activePlayerIds', 'array-contains', playerId));
+      const gamesSnap = await getDocs(q);
+
+      // 3. Queue the game updates in the batch
+      gamesSnap.docs.forEach(gameDoc => {
+        const gameData = gameDoc.data() as GameRecord;
+        
+        // Swap ID in active array
+        const newActiveIds = gameData.activePlayerIds.map(id => id === playerId ? targetMergeId : id);
+        
+        // Swap ID key in final scores
+        const newScores = { ...gameData.finalScores };
+        if (newScores[playerId] !== undefined) {
+          newScores[targetMergeId] = newScores[playerId];
+          delete newScores[playerId];
+        }
+
+        // Swap ID in snapshots (if tracking them)
+        const newSnapshots = gameData.playerSnapshots?.map(snap => 
+          snap.id === playerId ? { ...snap, id: targetMergeId } : snap
+        ) || [];
+
+        batch.update(gameDoc.ref, {
+          activePlayerIds: newActiveIds,
+          finalScores: newScores,
+          playerSnapshots: newSnapshots
+        });
+      });
+
+      // 4. Delete the ghost profile from Cloud Users (if it exists)
+      const oldUserRef = doc(db, 'Users', playerId);
+      batch.delete(oldUserRef);
+
+      // 5. Commit Cloud Changes
+      await batch.commit();
+
+      // 6. Update Local Storage Fallback
+      setLocalPlayers(prev => prev.filter(p => p.id !== playerId));
+      setLocalHistory(prev => prev.map(game => {
+        if (!game.activePlayerIds.includes(playerId)) return game;
+        const newActiveIds = game.activePlayerIds.map(id => id === playerId ? targetMergeId : id);
+        const newScores = { ...game.finalScores };
+        if (newScores[playerId] !== undefined) {
+          newScores[targetMergeId] = newScores[playerId];
+          delete newScores[playerId];
+        }
+        return { ...game, activePlayerIds: newActiveIds, finalScores: newScores };
+      }));
+
+      // Merge Complete! Go back to Roster
+      router.push('/roster');
+
+    } catch (error) {
+      console.error("Error executing merge:", error);
+      setIsMerging(false);
+    }
   };
 
   if (loading) {
@@ -174,7 +253,7 @@ export default function PlayerProfilePage() {
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
       
-      {/* Delete Confirmation Modal */}
+      {/* Existing Delete Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
@@ -196,10 +275,54 @@ export default function PlayerProfilePage() {
         </div>
       )}
 
+      {/* --- NEW: Admin Merge Modal --- */}
+      {showMergeModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => !isMerging && setShowMergeModal(false)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Admin Merge</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+              Move all of <b>{player.name}'s</b> history into a synced Cloud Account. This cannot be undone.
+            </p>
+            
+            <select 
+              value={targetMergeId} 
+              onChange={e => setTargetMergeId(e.target.value)}
+              className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 mb-6 font-bold text-slate-800 dark:text-white outline-none"
+            >
+              <option value="" disabled>Select target account...</option>
+              {allCloudUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.name} {u.isGuest ? '(Guest)' : '(Google)'}</option>
+              ))}
+            </select>
+
+            <div className="flex gap-2">
+              <button onClick={() => setShowMergeModal(false)} disabled={isMerging} className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl">
+                Cancel
+              </button>
+              <button 
+                onClick={executeMerge} 
+                disabled={!targetMergeId || isMerging} 
+                className="flex-1 bg-purple-600 text-white font-black py-3 rounded-xl disabled:opacity-50 flex justify-center items-center"
+              >
+                {isMerging ? <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div> : 'Confirm Merge'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky Header */}
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
         <h1 className="text-xl font-black text-slate-800 dark:text-white">Player Profile</h1>
         <div className="flex gap-2">
+          {/* Admin Context Menu */}
+          {isAdmin && !player.isCloudUser && (
+            <button onClick={handleOpenMergeModal} className="w-10 h-10 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20 text-purple-600 rounded-full text-sm font-bold active:scale-95 transition">
+              🔗
+            </button>
+          )}
+
           {isEditing ? (
             <>
               <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-sm font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full">Cancel</button>
@@ -216,7 +339,7 @@ export default function PlayerProfilePage() {
 
       <div className="pt-[88px] px-4 max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2">
         
-        {/* --- MOVED: Top Context Filter --- */}
+        {/* Top Context Filter */}
         {allHistory.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
             <button onClick={() => setFilterGame('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === 'ALL' ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
@@ -331,7 +454,6 @@ export default function PlayerProfilePage() {
             </div>
           ) : (
             filteredGames.map((game, index) => (
-              // --- FIX: The key prop is now explicitly unique by combining ID and index ---
               <GameCard 
                 key={`${game.gameId}-${index}`}
                 game={game} 
