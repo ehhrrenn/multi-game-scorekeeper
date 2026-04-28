@@ -223,7 +223,7 @@ export default function HistoryPage() {
         <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-2xl font-black">History Vault</h1>
           <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
-            {allHistory.length} Total Logs
+            {allHistory.length} Total Games
           </span>
         </div>
       </div>

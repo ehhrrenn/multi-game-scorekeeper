@@ -102,6 +102,20 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const winners = standings.filter(s => s.score === bestScore);
   const winnerNames = winners.map(w => `${w.emoji} ${w.name}`).join(', ');
 
+  const formattedDate = (() => {
+    const parsed = new Date(game.date);
+    return Number.isNaN(parsed.getTime())
+      ? game.date
+      : new Intl.DateTimeFormat('en-US', {
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        }).format(parsed);
+  })();
+
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
       
@@ -117,7 +131,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
         <div className="flex justify-between items-start pr-8">
           <div>
             <h3 className="font-black text-slate-800 dark:text-white text-lg">{game.gameName}</h3>
-            <p className="text-xs font-bold text-slate-400">{game.date}</p>
+            <p className="text-xs font-bold text-slate-400">{formattedDate}</p>
           </div>
           <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-right">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Winner</p>
