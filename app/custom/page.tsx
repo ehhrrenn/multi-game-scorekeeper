@@ -4,11 +4,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 // --- Types ---
-type Player = { id: string; name: string; emoji: string };
+type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type PlayerSnapshot = { id: string; name: string; emoji: string };
@@ -72,6 +72,34 @@ export default function CustomTracker() {
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
   
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
+
+  // --- CLOUD MERGE LOGIC ---
+  const [cloudPlayers, setCloudPlayers] = useState<Player[]>([]);
+
+  useEffect(() => {
+      async function fetchCloudRoster() {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'Users'));
+          // Add id: doc.id to ensure the player actually has an ID
+          const users = querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data(), 
+            isCloudUser: true 
+          } as Player));
+          
+          setCloudPlayers(users);
+        } catch (error) {
+          console.error("Error fetching cloud users:", error);
+        }
+      }
+      fetchCloudRoster();
+    }, []);
+
+  const allAvailablePlayers = useMemo(() => {
+    const combined = [...players, ...cloudPlayers];
+    return Array.from(new Map(combined.map(p => [p.id, p])).values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [players, cloudPlayers]);
 
   useEffect(() => {
     if (viewMode === 'SETUP' && !isGameStarted) {
@@ -494,11 +522,11 @@ export default function CustomTracker() {
 
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Current Active Players</h2>
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : players.map((p, i) => (
+              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : allAvailablePlayers.map((p, i) => (
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
                     <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.emoji}</button>
-                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}</span>
+                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span>☁️</span>}</span>
                   </div>
                   <div className="flex items-stretch">
                     <button onClick={() => removePlayer(p.id)} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
