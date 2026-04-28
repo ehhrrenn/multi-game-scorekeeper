@@ -50,18 +50,18 @@ export default function BottomNav() {
           onClick={() => router.push('/history')}
           className={`flex flex-col items-center justify-center transition-transform active:scale-95 ${pathname.includes('/history') ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
         >
-          <span className="text-xl mb-0.5">📊</span>
+          <span className="text-xl mb-0.5">📖</span>
           <span className={`text-[10px] uppercase tracking-wider ${pathname.includes('/history') ? 'font-bold' : 'font-medium'}`}>History</span>
         </button>
 
-        {/* Dynamic Resume Button */}
+        {/* Resume Button */}
         {hasActiveGame && (
           <div className="pl-4 sm:pl-6 border-l border-slate-200 dark:border-slate-700 flex items-center animate-in slide-in-from-right-4 fade-in duration-300">
             <button 
               onClick={() => router.push('/custom')}
               className="flex items-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-full transition-all active:scale-95 shadow-md shadow-blue-500/30"
             >
-              Resume <span className="text-xs">▶</span>
+              Resume <span className="text-xl">▶️</span>
             </button>
           </div>
         )}
