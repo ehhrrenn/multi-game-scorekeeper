@@ -419,7 +419,7 @@ const allAvailablePlayers = useMemo(() => {
       {viewMode === 'SETUP' && (
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white">Game Setup</h1>
+            <h1 className="text-2xl font-black text-slate-800 dark:text-white">🧮 Game Setup</h1>
             <button 
               onClick={() => setViewMode('GRID')} 
               disabled={players.length === 0}
@@ -554,10 +554,10 @@ const allAvailablePlayers = useMemo(() => {
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
                     <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-) : (
-  <span>{p.emoji || '👤'}</span>
-)}</button>
+                      <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+                    ) : (
+                      <span>{p.emoji || '👤'}</span>
+                    )}</button>
                     <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
                   </div>
                   <div className="flex items-stretch">

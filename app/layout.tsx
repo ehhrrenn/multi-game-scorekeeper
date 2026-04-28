@@ -4,8 +4,8 @@ import BottomNav from './components/BottomNav';
 import AuthButton from './components/AuthButton';
 
 export const metadata = {
-  title: 'Game Scorekeeper',
-  description: 'Pro-level tabletop game tracker.',
+  title: 'Scorekeeper Pro',
+  description: 'Scores Kept. Scores Settled.',
 };
 
 <AuthButton />

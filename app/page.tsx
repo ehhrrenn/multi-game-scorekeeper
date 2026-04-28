@@ -173,7 +173,7 @@ export default function Home() {
                 🧮
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Start Blank Game</h3>
+                <h3 className="text-lg font-black text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Start Custom Game</h3>
                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Universal multi-player score sheet.</p>
               </div>
             </div>
@@ -203,18 +203,19 @@ export default function Home() {
 
         <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2 mt-8">Classic Games</h2>
         <div className="grid gap-3">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between opacity-50 grayscale cursor-not-allowed">
+          {/* Yahtzee Module */}
+          <Link href="/yahtzee" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
                 🎲
               </div>
               <div>
                 <h3 className="text-lg font-black text-slate-800 dark:text-white">Yahtzee</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Coming soon.</p>
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Standard & Triple variants</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold">🔒</div>
-          </div>
+            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
+          </Link>
 
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between opacity-50 grayscale cursor-not-allowed">
             <div className="flex items-center gap-4">
