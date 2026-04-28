@@ -9,7 +9,7 @@ import BottomNav from '../components/BottomNav';
 import GameCard from '../components/GameCard';
 
 // --- Types ---
-type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string };
+type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
