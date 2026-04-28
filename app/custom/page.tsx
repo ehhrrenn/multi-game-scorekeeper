@@ -73,33 +73,45 @@ export default function CustomTracker() {
   
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
-  // --- CLOUD MERGE LOGIC ---
+// --- CLOUD MERGE LOGIC ---
   const [cloudPlayers, setCloudPlayers] = useState<Player[]>([]);
 
   useEffect(() => {
-      async function fetchCloudRoster() {
-        try {
-          const querySnapshot = await getDocs(collection(db, 'Users'));
-          // Add id: doc.id to ensure the player actually has an ID
-          const users = querySnapshot.docs.map(doc => ({ 
-            id: doc.id, 
-            ...doc.data(), 
-            isCloudUser: true 
-          } as Player));
-          
-          setCloudPlayers(users);
-        } catch (error) {
-          console.error("Error fetching cloud users:", error);
-        }
+    async function fetchCloudRoster() {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'Users'));
+        const users = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return { 
+             id: doc.id, // Guarantee a strict ID
+             name: data.name || 'Unknown User', // Fallback to prevent crash
+             emoji: data.emoji || '👤',
+             ...data, 
+             isCloudUser: true 
+          } as Player;
+        });
+        setCloudPlayers(users);
+      } catch (error) {
+        console.error("Error fetching cloud users:", error);
       }
-      fetchCloudRoster();
-    }, []);
+    }
+    fetchCloudRoster();
+  }, []);
 
-  const allAvailablePlayers = useMemo(() => {
-    const combined = [...players, ...cloudPlayers];
+const allAvailablePlayers = useMemo(() => {
+    // 1. We combine the local saved roster and cloud roster. 
+    // MAKE SURE your local storage variable here is actually named 'globalRoster' 
+    // (or whatever variable your 'scorekeeper_global_roster' useGameState uses!)
+    const combined = [...(globalRoster || []), ...cloudPlayers].filter(p => p && p.id);
+    
+    // 2. Safely deduplicate by ID so you don't get doubles
     return Array.from(new Map(combined.map(p => [p.id, p])).values())
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [players, cloudPlayers]);
+      .sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
+  }, [globalRoster, cloudPlayers]); // <-- Dependencies must be globalRoster and cloudPlayers
 
   useEffect(() => {
     if (viewMode === 'SETUP' && !isGameStarted) {
@@ -126,7 +138,11 @@ export default function CustomTracker() {
     return settings.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };
 
-  const isRoundComplete = players.length > 0 && players.every(p => 
+// 1. First, strip out any null/ghost players
+  const validPlayers = players.filter(p => p && p.id);
+  
+  // 2. Only check if the valid players have finished the round
+  const isRoundComplete = validPlayers.length > 0 && validPlayers.every(p => 
     rounds[rounds.length - 1].scores[p.id] !== undefined && rounds[rounds.length - 1].scores[p.id] !== null
   );
 
@@ -235,7 +251,7 @@ export default function CustomTracker() {
     if (!players.find(p => p.id === player.id)) setPlayers([...players, player]);
   };
 
-  const removePlayer = (playerId: string) => setPlayers(players.filter(p => p.id !== playerId));
+  const removePlayer = (playerId: string) => setPlayers(players.filter(p => p && p.id !== playerId));
 
   const movePlayer = (index: number, direction: 'UP' | 'DOWN') => {
     const newPlayers = [...players];
@@ -495,15 +511,22 @@ export default function CustomTracker() {
             </div>
             
             <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
-              {globalRoster.filter(gp => !players.find(p => p.id === gp.id)).map(gp => (
+              {allAvailablePlayers
+                .filter(gp => gp && gp.id && !players.some(p => p && p.id === gp.id))
+                .map(gp => (
                 <button 
                   key={gp.id} 
-                  onClick={() => selectFromGlobal(gp)} 
+                  // Kept the safe direct-state update to prevent ghosts!
+                  onClick={() => setPlayers([...players.filter(p => p && p.id), gp])} 
                   className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
                 >
-                  <span>{gp.emoji}</span> {gp.name}
+                  <span>{gp.emoji || '👤'}</span> {gp.name || 'Unknown'}
+                  {/* Small cloud indicator for Firebase users */}
+                  {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
                 </button>
               ))}
+              
+              {/* Your exact New Player button formatting restored */}
               <button 
                 onClick={() => setIsCreatingPlayer(true)} 
                 className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 transition-all"
@@ -522,14 +545,15 @@ export default function CustomTracker() {
 
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Current Active Players</h2>
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : allAvailablePlayers.map((p, i) => (
+              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : players.filter(p => p && p.id).map((p, i) => (
                 <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
                   <div className="flex items-center gap-3 p-4">
                     <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.emoji}</button>
-                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span>☁️</span>}</span>
+                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
                   </div>
                   <div className="flex items-stretch">
-                    <button onClick={() => removePlayer(p.id)} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
+                    {/* Bulletproof Removal Logic directly targets the active 'players' state */}
+                    <button onClick={() => setPlayers(players.filter(activeP => activeP && activeP.id !== p.id))} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
                     <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 w-12">
                       <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pb-1">▲</button>
                       <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pt-1">▼</button>
@@ -595,7 +619,7 @@ export default function CustomTracker() {
                     <thead className="sticky top-[64px] z-30 shadow-sm backdrop-blur-md bg-slate-100/95 dark:bg-slate-800/95 transition-colors">
                       <tr>
                         <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal border-b border-slate-200 dark:border-slate-700">Rnd</th>
-                        {players.map((p) => (
+                        {players.filter(p => p && p.id).map((p) => (
                           <th key={p.id} className="p-3 font-semibold min-w-[80px] border-b border-slate-200 dark:border-slate-700">
                             <div className="text-2xl bg-white dark:bg-slate-700/80 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.emoji}</div>
                             <div className="text-xs truncate font-bold text-slate-500 dark:text-slate-300 uppercase">{p.name}</div>
@@ -613,7 +637,7 @@ export default function CustomTracker() {
                               <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
                             </div>
                           </td>
-                          {players.map(p => {
+                          {players.filter(p => p && p.id).map(p => {
                             const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
                             return (
                               <td 
@@ -631,7 +655,7 @@ export default function CustomTracker() {
                     <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] border-t dark:border-slate-700">
                       <tr>
                         <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50">Tot</td>
-                        {players.map((p) => {
+                        {players.filter(p => p && p.id).map((p) => {
                           const total = calculateTotal(p.id);
                           let isWinner = false;
                           if (settings.target > 0) {
