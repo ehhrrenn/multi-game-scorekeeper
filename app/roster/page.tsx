@@ -170,60 +170,71 @@ export default function RosterPage() {
     );
   }
 
-  return (
-    <main className="pb-24 pt-6 px-4 max-w-screen-md mx-auto min-h-screen">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-800 dark:text-slate-100">
-            Global Roster
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">
-            {allPlayers.length} Players Synced
-          </p>
+return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
+      
+      <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
+          <h1 className="text-2xl font-black">All Players</h1>
+          <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
+            {allPlayers.length} Total Players
+          </span>
         </div>
       </div>
 
-      {allPlayers.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800">
-          <div className="text-4xl mb-3">☁️</div>
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">No Players Found</h3>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
-            Log in or create a local player to start your roster.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {playerStats.map((p) => (
-            <Link key={p.playerId} href={`/roster/${p.playerId}`}>
-              <div className="relative bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 active:scale-[0.98] transition-transform cursor-pointer overflow-hidden">
-                
-                {/* Cloud Indicator Badge */}
-                {p.isCloudUser && (
-                  <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10">
-                    CLOUD
-                  </div>
-                )}
+      {/* 2. MATCHING MAIN CONTAINER */}
+      <main className="max-w-screen-md mx-auto p-4 space-y-6">
+        
+        {/* Optional: If you ever want top-level Hero Stats for the whole roster, put the flex-box row here! */}
 
-                <div className="flex items-center gap-4 mb-4 mt-2">
-                  {p.photoURL ? (
-                    <img src={p.photoURL} alt={p.name} className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl">
-                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-) : (
-  <span>{p.emoji || '👤'}</span>
-)}
+        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-1 mt-2">
+          Player Profiles
+        </h2>
+
+        {/* 3. MATCHING FEED / LIST VIEW */}
+        {loading ? (
+          <div className="text-center p-8 text-slate-400 font-medium">Syncing Cloud Roster...</div>
+        ) : playerStats.length === 0 ? (
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8 text-center text-slate-500 font-medium border border-slate-200 dark:border-slate-700 border-dashed">
+            No players found. Start a game to add players!
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {playerStats.map((p) => (
+              <Link 
+                key={p.playerId} 
+                href={`/roster/${p.playerId}`}
+                className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all"
+              >
+                <div className="flex items-center gap-4 mb-4">
+                  
+                  {/* Matching Avatar Sizing */}
+                  <div className="w-14 h-14 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-3xl shadow-sm overflow-hidden flex-shrink-0">
+                    {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+                      <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{p.emoji || '👤'}</span>
+                    )}
+                  </div>
+                  
+                  {/* Name and Topline Stats */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-lg font-black flex items-center gap-2 truncate">
+                      <span className="truncate">{p.name}</span>
+                      {p.isCloudUser && <span className="text-xs flex-shrink-0 text-blue-500">☁️</span>}
                     </div>
-                  )}
-                  <div>
-                    <div className="text-lg font-black text-slate-800 dark:text-slate-100">{p.name}</div>
-                    <div className="text-xs text-slate-400 dark:text-slate-500 font-bold">
+                    <div className="text-xs text-slate-400 dark:text-slate-500 font-bold truncate">
                       {p.gamesPlayed} games • {p.wins} wins • {(p.winRate * 100).toFixed(0)}%
                     </div>
                   </div>
+                  
+                  {/* Native iOS Chevron to imply clickability */}
+                  <div className="text-slate-300 dark:text-slate-600 pl-2">
+                    ❯
+                  </div>
                 </div>
 
+                {/* Stat Pillars */}
                 <div className="flex gap-3 text-center">
                   <div className="hidden sm:block flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl py-2">
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total</div>
@@ -235,14 +246,14 @@ export default function RosterPage() {
                   </div>
                   <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl py-2">
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Best</div>
-                    <div className="font-black text-slate-800 dark:text-slate-200">{p.bestScore}</div>
+                    <div className="font-black text-emerald-600 dark:text-emerald-400">{p.bestScore}</div>
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </main>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

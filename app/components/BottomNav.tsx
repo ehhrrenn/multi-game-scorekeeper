@@ -43,7 +43,7 @@ export default function BottomNav() {
           className={`flex flex-col items-center justify-center transition-transform active:scale-95 ${pathname.includes('/roster') ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
         >
           <span className="text-xl mb-0.5">👥</span>
-          <span className={`text-[10px] uppercase tracking-wider ${pathname.includes('/roster') ? 'font-bold' : 'font-medium'}`}>Roster</span>
+          <span className={`text-[10px] uppercase tracking-wider ${pathname.includes('/roster') ? 'font-bold' : 'font-medium'}`}>Players</span>
         </button>
 
         <button 
