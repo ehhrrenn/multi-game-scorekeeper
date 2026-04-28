@@ -622,24 +622,39 @@ const allAvailablePlayers = useMemo(() => {
               <div className="animate-in fade-in pb-4">
                 
                 {/* 🚨 REMOVED `overflow-x-auto` HERE SO STICKY HEADER WORKS GLOBALLY */}
-                <div className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 mb-6">
-                  <table className="w-full text-center border-collapse relative">
-                    
-                    <thead className="sticky top-[64px] z-30 shadow-sm backdrop-blur-md bg-slate-100/95 dark:bg-slate-800/95 transition-colors">
-                      <tr>
-                        <th className="p-3 w-16 text-slate-500 dark:text-slate-400 font-normal border-b border-slate-200 dark:border-slate-700">Rnd</th>
-                        {players.filter(p => p && p.id).map((p) => (
-                          <th key={p.id} className="p-3 font-semibold min-w-[80px] border-b border-slate-200 dark:border-slate-700">
-                            <div className="text-2xl bg-white dark:bg-slate-700/80 w-10 h-10 mx-auto rounded-full flex items-center justify-center shadow-sm dark:shadow-none mb-1">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-) : (
-  <span>{p.emoji || '👤'}</span>
-)}</div>
-                            <div className="text-xs truncate font-bold text-slate-500 dark:text-slate-300 uppercase">{p.name}</div>
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
+                  {/* The overflow-x-auto allows horizontal swiping on small screens */}
+                  <div className="overflow-x-auto scrollbar-hide">
+                    {/* table-fixed ensures all columns are exactly the same width */}
+                    <table className="w-full table-fixed min-w-max">
+                      <thead>
+                        <tr>
+                          {/* Round Column - Fixed Width */}
+                          <th className="w-16 sticky left-0 z-30 bg-slate-50/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Rnd
                           </th>
-                        ))}
-                      </tr>
-                    </thead>
+                          
+                          {/* Player Columns - Min Width for swiping */}
+                          {players.filter(p => p && p.id).map((p) => (
+                            <th key={p.id} className="min-w-[100px] w-auto sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
+                                  {/* Plug in the Avatar logic here! */}
+                                  {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+                                    <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+                                  ) : (
+                                    <span>{p.emoji || '👤'}</span>
+                                  )}
+                                </div>
+                                {/* Truncate ensures really long names don't break the layout if First Name fails */}
+                                <div className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
+                                  {p.name.split(' ')[0]}
+                                </div>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
                     
                     <tbody>
                       {rounds.map(round => (
@@ -656,7 +671,7 @@ const allAvailablePlayers = useMemo(() => {
                               <td 
                                 key={p.id} 
                                 onClick={() => handleCellTap(round.roundId, p.id)} 
-                                className={`p-4 text-xl font-medium border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
+                                className={`p-4 text-xl font-medium text-center border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
                               >
                                 {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
                               </td>
@@ -667,7 +682,7 @@ const allAvailablePlayers = useMemo(() => {
                     </tbody>
                     <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] border-t dark:border-slate-700">
                       <tr>
-                        <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50">Tot</td>
+                        <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 text-center">Tot</td>
                         {players.filter(p => p && p.id).map((p) => {
                           const total = calculateTotal(p.id);
                           let isWinner = false;
@@ -676,14 +691,14 @@ const allAvailablePlayers = useMemo(() => {
                             if (settings.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
                           }
                           return (
-                            <td key={p.id} className={`p-4 font-black text-xl ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
+                            <td key={p.id} className={`p-4 font-black text-xl text-center ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
                               {total}
                             </td>
                           );
                         })}
                       </tr>
-                    </tfoot>
-                  </table>
+                    </tfoot></table>
+                  </div>
                 </div>
                 
                 <div className="flex flex-row gap-3">
@@ -726,10 +741,10 @@ const allAvailablePlayers = useMemo(() => {
                     <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlayerColor(p.emoji) }}></div>
                       <span>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-) : (
-  <span>{p.emoji || '👤'}</span>
-)}</span>
+                          <img src={p.photoURL} alt={p.name} className="w-4 h-4 object-cover rounded-full" />
+                        ) : (
+                          <span>{p.emoji || '👤'}</span>
+                        )}</span>
                     </div>
                   ))}
                 </div>
