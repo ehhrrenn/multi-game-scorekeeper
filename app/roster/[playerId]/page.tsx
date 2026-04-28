@@ -146,15 +146,32 @@ export default function PlayerProfilePage() {
   const max = Math.max(...stats.graphData, 10); const min = Math.min(...stats.graphData, 0); const range = max - min || 1;
 
   // Handlers
-  const handleEditClick = () => setIsEditing(true);
+const handleEditClick = () => setIsEditing(true);
 
-  const handleSave = () => {
-    const trimmed = editName.trim() || 'Unknown';
-    setLocalPlayers(localPlayers.map(p => p.id === playerId ? { ...p, name: trimmed, emoji: editEmoji } : p));
+const handleSave = async () => {
+  if (!player) return;
+  
+  if (player.isCloudUser) {
+    // 1. Save directly to Firestore for Cloud Users
+    try {
+      const userRef = doc(db, 'Users', player.id);
+      const { updateDoc } = await import('firebase/firestore');
+      await updateDoc(userRef, {
+        name: editName,
+        emoji: editEmoji,
+      });
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Error updating cloud profile:", error);
+    }
+  } else {
+    // 2. Original local save logic for Guest/Local players
+    setLocalPlayers(prev => prev.map(p => p.id === player.id ? { ...p, name: editName, emoji: editEmoji } : p));
     setIsEditing(false);
-  };
+  }
+};
 
-  const handleDelete = () => {
+const handleDelete = () => {
     setLocalPlayers(localPlayers.filter(p => p.id !== playerId));
     router.push('/roster');
   };
@@ -467,27 +484,41 @@ export default function PlayerProfilePage() {
       </div>
 
       {/* Emoji Picker Modal */}
-      {showEmojiPicker && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
-              <button onClick={() => setShowEmojiPicker(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
-            </div>
-            <div className="grid grid-cols-5 gap-3">
-              {EMOJIS.map(emoji => (
-                <button 
-                  key={emoji} 
-                  onClick={() => { setEditEmoji(emoji); setShowEmojiPicker(false); }}
-                  className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+            {showEmojiPicker && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
+                <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
+                    <button onClick={() => setShowEmojiPicker(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
+                  </div>
+                  
+                  {/* INJECTED: Revert to Photo Button */}
+                  {player.isCloudUser && player.photoURL && (
+                    <button 
+                      onClick={() => {
+                        setEditEmoji(''); // Clear the emoji
+                        setShowEmojiPicker(false); // Close the modal
+                      }}
+                      className="w-full mb-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold rounded-xl flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-800 transition-all active:scale-95"
+                    >
+                      <span>🖼️</span> Use Google Photo
+                    </button>
+                  )}
+
+                  <div className="grid grid-cols-5 gap-3">
+                    {EMOJIS.map(emoji => (
+                      <button 
+                        key={emoji} 
+                        onClick={() => { setEditEmoji(emoji); setShowEmojiPicker(false); }}
+                        className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
       
       <BottomNav />
     </main>

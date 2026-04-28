@@ -243,14 +243,19 @@ export default function HistoryPage() {
 
             <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
-              <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none truncate">
-                <option value="ALL">All Players</option>
-                {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-) : (
-  <span>{p.emoji || '👤'}</span>
-)} {p.name}</option>)}
-              </select>
+                <select 
+                  value={selectedPlayer} 
+                  onChange={e => setSelectedPlayer(e.target.value)} 
+                  className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 focus:outline-none appearance-none"
+                >
+                  <option value="ALL">All Players</option>
+                  {/* Replace the complex avatar logic with a simple text-only fallback for the dropdown */}
+                  {uniquePlayers.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? '👤' : (p.emoji || '👤')} {p.name}
+                    </option>
+                  ))}
+                </select>
             </div>
           </div>
         )}
