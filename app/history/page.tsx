@@ -245,7 +245,11 @@ export default function HistoryPage() {
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
               <select value={selectedPlayer} onChange={(e) => setSelectedPlayer(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none truncate">
                 <option value="ALL">All Players</option>
-                {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                {uniquePlayers.map(p => <option key={p.id} value={p.id}>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+) : (
+  <span>{p.emoji || '👤'}</span>
+)} {p.name}</option>)}
               </select>
             </div>
           </div>

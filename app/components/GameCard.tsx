@@ -5,9 +5,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 // --- Types ---
-type PlayerSnapshot = { id: string; name: string; emoji: string };
+type PlayerSnapshot = {
+  id: string;
+  name: string;
+  emoji: string;
+  isCloudUser?: boolean;
+  photoURL?: string;
+  useCustomEmoji?: boolean;
+};
 type Round = { roundId: number; scores: Record<string, number> };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+type StandingsPlayer = PlayerSnapshot & { score: number };
 
 export type GameRecord = {
   gameId: string;
@@ -33,11 +41,17 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const [activeTab, setActiveTab] = useState<'STANDINGS' | 'GRID' | 'GRAPH'>('STANDINGS');
 
   const isCountDown = game.settings?.scoreDirection === 'DOWN';
-  const standings = [...game.activePlayerIds]
+  const standings: StandingsPlayer[] = [...game.activePlayerIds]
     .map(pId => ({
       id: pId,
       score: game.finalScores[pId] || 0,
-      ...(game.playerSnapshots.find(p => p.id === pId) || { name: 'Unknown', emoji: '👤' })
+      ...(game.playerSnapshots.find(p => p.id === pId) || {
+        name: 'Unknown',
+        emoji: '👤',
+        isCloudUser: false,
+        photoURL: undefined,
+        useCustomEmoji: undefined
+      })
     }))
     .sort((a, b) => isCountDown ? a.score - b.score : b.score - a.score);
 
@@ -117,7 +131,11 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto scrollbar-hide">
           {standings.map(p => (
             <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold whitespace-nowrap ${winners.some(w => w.id === p.id) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-              <span className="text-sm">{p.emoji}</span>
+              <span className="text-sm">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+) : (
+  <span>{p.emoji || '👤'}</span>
+)}</span>
               <span className="max-w-[70px] truncate">{p.name}</span>
               <span className="opacity-40 ml-0.5">|</span>
               <span className="ml-0.5">{p.score}</span>
@@ -162,7 +180,11 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                 <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0 border-slate-200 dark:border-slate-800">
                   <div className="flex items-center gap-3">
                     <span className={`font-black w-4 text-center ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 dark:text-slate-600'}`}>{i + 1}</span>
-                    <span className="text-xl">{p.emoji}</span>
+                    <span className="text-xl">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+) : (
+  <span>{p.emoji || '👤'}</span>
+)}</span>
                     <span className="font-bold text-slate-700 dark:text-slate-200">{p.name}</span>
                   </div>
                   <span className="font-black text-lg">{p.score}</span>
@@ -179,7 +201,11 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                     <th className="p-2 w-12 text-slate-500 border-b border-slate-200 dark:border-slate-700 font-normal">Rnd</th>
                     {standings.map(p => (
                       <th key={p.id} className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        <div className="text-lg">{p.emoji}</div>
+                        <div className="text-lg">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+) : (
+  <span>{p.emoji || '👤'}</span>
+)}</div>
                         <div className="text-[10px] font-bold uppercase text-slate-500 truncate max-w-[60px] mx-auto">{p.name}</div>
                       </th>
                     ))}

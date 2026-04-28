@@ -37,6 +37,7 @@ type PlayerStats = {
   avgPoints: number;
   bestScore: number;
   isCloudUser: boolean; // Helps us badge them in the UI
+  useCustomEmoji: boolean;
 };
 
 export default function RosterPage() {
@@ -105,6 +106,7 @@ export default function RosterPage() {
         avgPoints: 0,
         bestScore: 0,
         isCloudUser: isCloud,
+        useCustomEmoji: false,
       };
     });
 
@@ -207,7 +209,11 @@ export default function RosterPage() {
                     <img src={p.photoURL} alt={p.name} className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700 object-cover" />
                   ) : (
                     <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-2xl">
-                      {p.emoji}
+                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+) : (
+  <span>{p.emoji || '👤'}</span>
+)}
                     </div>
                   )}
                   <div>
