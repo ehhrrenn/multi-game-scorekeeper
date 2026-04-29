@@ -394,30 +394,28 @@ export default function YahtzeePage() {
         {/* SCORE INPUT BOTTOM SHEET */}
 {/* --- Score Input Modal --- */}
       {activeCell && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center pointer-events-auto">
-          {/* Blur Overlay - Click to dismiss */}
+        <>
+          {/* Blur Overlay - Click outside to dismiss */}
           <div 
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-            onClick={() => setActiveCell(null)}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[90]"
+            onClick={() => {
+              setActiveCell(null);
+              setInputValue('');
+            }}
           />
-          
-          {/* Modal Card - Elevated above blur, padded for bottom nav */}
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[2rem] p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] relative z-10 pb-24 animate-in slide-in-from-bottom-full duration-300">
+
+          {/* Bottom-Docked Numpad Container (Matching Custom Game UI) */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-2xl p-4 pb-24 z-[100] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
             
             {/* Header / Display */}
-            <div className="text-center mb-6">
-              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                {players.find(p => p.id === activeCell.playerId)?.name}
+            <div className="mb-4">
+              <p className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                {players.find(p => p.id === activeCell.playerId)?.name} • {UPPER_CATEGORIES.find(c => c.id === activeCell.category)?.name || LOWER_CATEGORIES.find(c => c.id === activeCell.category)?.name}
               </p>
-              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-4">
-                {UPPER_CATEGORIES.find(c => c.id === activeCell.category)?.name || 
-                 LOWER_CATEGORIES.find(c => c.id === activeCell.category)?.name}
-              </h3>
-              
-              <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl py-4 px-6 mb-2 flex items-center justify-center min-h-[5rem]">
-                <span className={`text-5xl font-black tabular-nums ${inputValue ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-300 dark:text-slate-600'}`}>
+              <div className="flex justify-between items-center">
+                <div className="flex-1 text-center text-4xl font-black py-2 bg-slate-50 dark:bg-slate-950 rounded-xl shadow-inner border border-slate-100 dark:border-slate-800 tracking-tight text-blue-600 dark:text-blue-400">
                   {inputValue || '-'}
-                </span>
+                </div>
               </div>
             </div>
 
@@ -427,75 +425,82 @@ export default function YahtzeePage() {
               
               if (options === 'NUMPAD') {
                 return (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-2">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
                       <button
                         key={num}
                         onClick={() => setInputValue(prev => prev.length < 3 ? prev + num : prev)}
-                        className="h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 text-2xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-sm"
+                        className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
                       >
                         {num}
                       </button>
                     ))}
+                    
+                    {/* Clear Button (Replaces +/- from Custom Game) */}
                     <button
                       onClick={() => setInputValue('')}
-                      className="h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold text-lg hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all shadow-sm"
+                      className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-lg font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
                     >
                       Clear
                     </button>
+                    
                     <button
                       onClick={() => setInputValue(prev => prev + '0')}
-                      className="h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 text-2xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-sm"
+                      className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
                     >
                       0
                     </button>
+                    
+                    {/* Backspace */}
                     <button
-                      onClick={() => handleSaveScore(Number(inputValue))}
-                      className="h-16 rounded-2xl bg-indigo-600 text-white font-black text-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-200 dark:shadow-none flex items-center justify-center"
+                      onClick={() => setInputValue(prev => prev.slice(0, -1))}
+                      className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600 transition-all active:scale-95"
                     >
-                      ✓
+                      ⌫
                     </button>
                   </div>
                 );
               }
 
-              // Pre-configured Options Array Layout (e.g. [0, 2, 4, 6, 8, 10])
+              // Pre-configured Options Array Layout (e.g., [0, 2, 4, 6, 8, 10])
               return (
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-2 ${options.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                   {options.map((scoreOpt) => (
                     <button
                       key={scoreOpt}
-                      onClick={() => {
-                        setInputValue(scoreOpt.toString());
-                        // Optional: Auto-save when an exact option is tapped!
-                        // handleSaveScore(scoreOpt); 
-                      }}
-                      className={`h-16 rounded-2xl text-2xl font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center ${
+                      onClick={() => setInputValue(scoreOpt.toString())}
+                      className={`py-3 rounded-xl text-xl font-bold transition-all active:scale-95 ${
                         inputValue === scoreOpt.toString() 
-                          ? 'bg-indigo-600 text-white shadow-md' 
-                          : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700'
                       }`}
                     >
                       {scoreOpt}
                     </button>
                   ))}
                   
-                  {/* Save Button spanning full width beneath the options */}
-                  <div className="col-span-2 pt-2">
-                    <button
-                      onClick={() => handleSaveScore(Number(inputValue))}
-                      disabled={!inputValue}
-                      className="w-full h-16 rounded-2xl bg-indigo-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white font-black text-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center justify-center"
-                    >
-                      Save Score
-                    </button>
-                  </div>
+                  {/* Dedicated Clear Button for fixed option grids */}
+                  <button
+                    onClick={() => setInputValue('')}
+                    className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-lg font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95 col-span-full mt-1"
+                  >
+                    Clear
+                  </button>
                 </div>
               );
             })()}
 
+            {/* Match Custom Game Submit Button exactly */}
+            <button
+              onClick={() => handleSaveScore(Number(inputValue))}
+              disabled={inputValue === ''}
+              className="w-full mt-3 bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white py-3.5 rounded-xl text-lg font-bold active:bg-blue-700 transition-all active:scale-95 shadow-md shadow-blue-500/20"
+            >
+              Enter Score
+            </button>
+
           </div>
-        </div>
+        </>
       )}
 
         <BottomNav />
