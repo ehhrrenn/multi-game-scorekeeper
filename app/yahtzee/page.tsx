@@ -184,6 +184,40 @@ export default function YahtzeePage() {
     setInputValue('');
   };
 
+  const handleSaveScore = (scoreToSave: number) => {
+    if (!activeCell) return;
+
+    // 1. Update the score state
+    // Note: If your state setter is named something other than 'setScores', 
+    // change it here (e.g., setGameData, etc.)
+    setScores(prevScores => {
+      // Get the current player's scores, or default to an empty object
+      const playerScores = prevScores[activeCell.playerId] || {};
+      
+      // Get the specific category array, or default to an array with nulls
+      const categoryScores = playerScores[activeCell.category] || [null]; 
+      
+      // Copy the array to avoid mutating state directly
+      const newCategoryScores = [...categoryScores];
+      
+      // Update the specific column index with the new score
+      newCategoryScores[activeCell.colIndex] = scoreToSave;
+
+      // Return the newly constructed state
+      return {
+        ...prevScores,
+        [activeCell.playerId]: {
+          ...playerScores,
+          [activeCell.category]: newCategoryScores
+        }
+      };
+    });
+
+    // 2. Clean up and close the modal
+    setActiveCell(null);
+    setInputValue('');
+  };
+
   const calcUpperTotal = (playerId: string, colIndex: number) => UPPER_CATEGORIES.reduce((sum, cat) => sum + (scores[playerId]?.[cat.id]?.[colIndex] || 0), 0);
   const calcUpperBonus = (upperTotal: number) => upperTotal >= 63 ? 35 : 0;
   const calcLowerTotal = (playerId: string, colIndex: number) => LOWER_CATEGORIES.reduce((sum, cat) => sum + (scores[playerId]?.[cat.id]?.[colIndex] || 0), 0);
