@@ -41,19 +41,20 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const [activeTab, setActiveTab] = useState<'STANDINGS' | 'GRID' | 'GRAPH'>('STANDINGS');
 
   const isCountDown = game.settings?.scoreDirection === 'DOWN';
-  const standings: StandingsPlayer[] = [...game.activePlayerIds]
-    .map(pId => ({
-      id: pId,
-      score: game.finalScores[pId] || 0,
-      ...(game.playerSnapshots.find(p => p.id === pId) || {
-        name: 'Unknown',
-        emoji: '👤',
-        isCloudUser: false,
-        photoURL: undefined,
-        useCustomEmoji: undefined
-      })
-    }))
-    .sort((a, b) => isCountDown ? a.score - b.score : b.score - a.score);
+  const standings = [...game.activePlayerIds]
+        .map(pId => {
+          // Find the player's snapshot, or provide a fallback
+          const snapshot = game.playerSnapshots.find(p => p.id === pId) || {
+            name: 'Unknown',
+            emoji: '👤'
+          };
+          
+          return {
+            ...snapshot,                       // 1. Spread the snapshot first
+            id: pId,                           // 2. Explicitly set the ID (overrides snapshot ID safely)
+            score: game.finalScores[pId] || 0, // 3. Set the score
+          };
+        })
 
   const handleResume = (e: React.MouseEvent) => {
     e.stopPropagation();
