@@ -1,7 +1,7 @@
 // app/yahtzee/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -10,11 +10,28 @@ import BottomNav from '../components/BottomNav';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
-type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
+type PlayerSnapshot = { id: string; name: string; emoji: string };
 
 // --- Constants ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
+const EMOJI_COLORS: Record<string, string> = {
+  '🦊': '#f97316', '⚡️': '#eab308', '🦖': '#22c55e', '🤠': '#8b5cf6', 
+  '👾': '#a855f7', '🍕': '#ef4444', '🚀': '#3b82f6', '🐙': '#ec4899', 
+  '🦄': '#d946ef', '🥑': '#84cc16', '🔥': '#dc2626', '💎': '#06b6d4', 
+  '👻': '#94a3b8', '👑': '#fbbf24', '😎': '#38bdf8', '🤖': '#64748b',
+  '👽': '#10b981', '🐶': '#d97706', '🐱': '#f59e0b', '🐼': '#1e293b'
+};
 
+const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+
+type GameRecord = {
+  gameId: string;
+  date: string;
+  gameName: string;
+  finalScores: Record<string, number>;
+  activePlayerIds: string[];
+  playerSnapshots: PlayerSnapshot[];
+};
 export default function YahtzeePage() {
   const router = useRouter();
 
@@ -23,46 +40,54 @@ export default function YahtzeePage() {
   const [players, setPlayers] = useGameState<Player[]>('yahtzee_players', []);
   const [rounds, setRounds] = useGameState<any[]>('yahtzee_rounds', []); 
   const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
+  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
 
   // --- Roster & UI State ---
-  const [allAvailablePlayers, setAllAvailablePlayers] = useState<PlayerSnapshot[]>([]);
+  //const [allAvailablePlayers, setAllAvailablePlayers] = useState<Player[]>([]); // Make sure setAllAvailablePlayers is here!
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingPlayer, setIsCreatingPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
+  const [globalRoster, setGlobalRoster] = useState<Player[]>([]);
+  const [cloudPlayers, setCloudPlayers] = useState<Player[]>([]);
 
-  // --- Fetch Global Roster ---
   useEffect(() => {
-    const fetchRoster = async () => {
+    async function fetchCloudRoster() {
       try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const roster: PlayerSnapshot[] = [];
-        usersSnap.forEach(doc => {
-          const d = doc.data();
-          roster.push({
-            id: doc.id,
-            name: d.name || 'Unknown',
-            emoji: d.emoji || '👤',
-            photoURL: d.photoURL,
-            isCloudUser: !!d.email,
-            useCustomEmoji: d.useCustomEmoji || false
-          });
+        const querySnapshot = await getDocs(collection(db, 'Users'));
+        const users = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return { 
+             id: doc.id, // Guarantee a strict ID
+             name: data.name || 'Unknown User', // Fallback to prevent crash
+             emoji: data.emoji || '👤',
+             ...data, 
+             isCloudUser: true 
+          } as Player;
         });
-        // Sort: Cloud users first, then alphabetically
-        roster.sort((a, b) => {
-          if (a.isCloudUser === b.isCloudUser) return a.name.localeCompare(b.name);
-          return a.isCloudUser ? -1 : 1;
-        });
-        setAllAvailablePlayers(roster);
-      } catch (err) {
-        console.error("Error fetching roster:", err);
-      } finally {
-        setIsLoading(false);
+        setCloudPlayers(users);
+      } catch (error) {
+        console.error("Error fetching cloud users:", error);
       }
-    };
-    fetchRoster();
+    }
+    fetchCloudRoster();
   }, []);
 
+const allAvailablePlayers = useMemo(() => {
+    // 1. We combine the local saved roster and cloud roster. 
+    // MAKE SURE your local storage variable here is actually named 'globalRoster' 
+    // (or whatever variable your 'scorekeeper_global_roster' useGameState uses!)
+    const combined = [...(globalRoster || []), ...cloudPlayers].filter(p => p && p.id);
+    
+    // 2. Safely deduplicate by ID so you don't get doubles
+    return Array.from(new Map(combined.map(p => [p.id, p])).values())
+      .sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
+  }, [globalRoster, cloudPlayers]); // <-- Dependencies must be globalRoster and cloudPlayers
+  
   // --- Setup Actions ---
   const startGame = () => {
     if (players.length === 0) return;
@@ -79,36 +104,31 @@ export default function YahtzeePage() {
     setPhase('PLAYING');
   };
 
-const addPlayer = async () => {
-    if (!newPlayerName.trim()) return;
-    
-    // 1. Create the new guest profile
-    const newId = `guest_${Date.now()}`;
-    const newPlayer: Player = {
-      id: newId,
-      name: newPlayerName.trim(),
-      emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-      isCloudUser: false
-    };
+    const clearSetup = () => {
+    setPlayers([]);
+  };
 
-    // 2. Instantly update local state so the UI feels fast
-    setPlayers([...players.filter(p => p && p.id), newPlayer]);
-    setAllAvailablePlayers(prev => [...prev, newPlayer]); // Add to roster queue
+  const addPlayer = () => {
+    const trimmedName = newPlayerName.trim();
+    if (!trimmedName) { setIsCreatingPlayer(false); return; }
+
+    const existingGlobal = globalRoster.find(p => p.name.toLowerCase() === trimmedName.toLowerCase());
+    if (existingGlobal) {
+      if (!players.find(p => p.id === existingGlobal.id)) setPlayers([...players, existingGlobal]);
+    } else {
+      const newPlayer = { id: Date.now().toString(), name: trimmedName, emoji: getRandomEmoji() };
+      setGlobalRoster([...globalRoster, newPlayer]);
+      setPlayers([...players, newPlayer]);
+    }
     setNewPlayerName('');
     setIsCreatingPlayer(false);
-
-    // 3. Background Sync to Firestore (Global Roster)
-    try {
-      await setDoc(doc(db, 'users', newId), {
-        name: newPlayer.name,
-        emoji: newPlayer.emoji,
-        isCloudUser: false,
-        createdAt: new Date().toISOString()
-      });
-    } catch (err) {
-      console.error("Error syncing new player to cloud:", err);
-    }
   };
+
+  const selectFromGlobal = (player: Player) => {
+    if (!players.find(p => p.id === player.id)) setPlayers([...players, player]);
+  };
+
+  const removePlayer = (playerId: string) => setPlayers(players.filter(p => p && p.id !== playerId));
 
   const movePlayer = (index: number, direction: 'UP' | 'DOWN') => {
     const newPlayers = [...players];
@@ -120,28 +140,14 @@ const addPlayer = async () => {
     setPlayers(newPlayers);
   };
 
-  const updateEmoji = async (playerId: string, newEmoji: string) => {
-    // 1. Instantly update local state
-    setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
-    setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
-    
-    // 2. Background Sync to Firestore (Only allow guest emoji changes)
-    const playerToUpdate = players.find(p => p.id === playerId) || allAvailablePlayers.find(p => p.id === playerId);
-    if (playerToUpdate && !playerToUpdate.isCloudUser) {
-      try {
-        await setDoc(doc(db, 'users', playerId), { emoji: newEmoji }, { merge: true });
-      } catch (err) {
-        console.error("Error syncing emoji update to cloud:", err);
-      }
-    }
-  };
-
-  const clearSetup = () => {
-    if (confirm('Are you sure you want to clear the setup? This will remove all selected players.')) {
-      setPlayers([]);
-      setRounds([]);
-      window.localStorage.removeItem('scorekeeper_active_game_id');
-    }
+  const updateEmoji = (playerId: string, newEmoji: string) => {
+    const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p);
+    setPlayers(updatedPlayers);
+    setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    setGameHistory(gameHistory.map(game => ({
+      ...game,
+      playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p)
+    })));
   };
 
   // ==========================================
@@ -228,24 +234,22 @@ const addPlayer = async () => {
         </div>
         
         <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
-          {isLoading ? (
-             <span className="text-slate-400 text-sm font-medium px-2 py-2">Loading cloud roster...</span>
-          ) : allAvailablePlayers
+          {allAvailablePlayers
             .filter(gp => gp && gp.id && !players.some(p => p && p.id === gp.id))
             .map(gp => (
             <button 
               key={gp.id} 
+              // Kept the safe direct-state update to prevent ghosts!
               onClick={() => setPlayers([...players.filter(p => p && p.id), gp])} 
               className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
             >
-              <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-                {gp.isCloudUser && gp.photoURL && !gp.useCustomEmoji ? (
+              <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{gp.isCloudUser && gp.photoURL && !gp.useCustomEmoji ? (
                   <img src={gp.photoURL} alt={gp.name} className="w-full h-full object-cover rounded-full" />
                 ) : (
                   <span>{gp.emoji || '👤'}</span>
                 )}
-              </span> 
-              {gp.name || 'Unknown'}
+                </span> {gp.name || 'Unknown'}
+              {/* Small cloud indicator for Firebase users */}
               {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
             </button>
           ))}
