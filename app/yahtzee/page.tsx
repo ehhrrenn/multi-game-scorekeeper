@@ -188,6 +188,31 @@ export default function YahtzeePage() {
   const calcUpperBonus = (upperTotal: number) => upperTotal >= 63 ? 35 : 0;
   const calcLowerTotal = (playerId: string, colIndex: number) => LOWER_CATEGORIES.reduce((sum, cat) => sum + (scores[playerId]?.[cat.id]?.[colIndex] || 0), 0);
 
+  // Helper to generate the correct keypad options based on the active category
+  const getScoringOptions = (categoryId: string) => {
+    switch (categoryId) {
+      // Upper Section (Multiples of the dice value - max 5 dice)
+      case 'ones': return [0, 1, 2, 3, 4, 5];
+      case 'twos': return [0, 2, 4, 6, 8, 10];
+      case 'threes': return [0, 3, 6, 9, 12, 15];
+      case 'fours': return [0, 4, 8, 12, 16, 20];
+      case 'fives': return [0, 5, 10, 15, 20, 25];
+      case 'sixes': return [0, 6, 12, 18, 24, 30];
+      // Fixed Lower Section
+      case 'fullHouse': return [0, 25];
+      case 'smStraight': return [0, 30];
+      case 'lgStraight': return [0, 40];
+      case 'yahtzee': return [0, 50];
+      // Variable Lower Section (Fallback to standard numpad)
+      case '3kind':
+      case '4kind':
+      case 'chance':
+      case 'bonus':
+      default: 
+        return 'NUMPAD'; 
+    }
+  };
+  
   // ==========================================
   // RENDER: PLAYING PHASE (Premium Grid)
   // ==========================================
@@ -333,28 +358,111 @@ export default function YahtzeePage() {
         </main>
 
         {/* SCORE INPUT BOTTOM SHEET */}
-        {activeCell && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-none p-4">
-            <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] pointer-events-auto" onClick={() => setActiveCell(null)} />
-            <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl pointer-events-auto animate-in slide-in-from-bottom-8 border border-slate-200 dark:border-slate-800">
-              <div className="text-center mb-6">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{players.find(p => p.id === activeCell.playerId)?.name}</p>
-                <h3 className="text-2xl font-black text-slate-800 dark:text-white">{[...UPPER_CATEGORIES, ...LOWER_CATEGORIES].find(c => c.id === activeCell.category)?.name}</h3>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-4 mb-4 text-center text-4xl font-black text-blue-600 dark:text-blue-400 h-20 flex items-center justify-center">
-                {inputValue || '0'}
-              </div>
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                  <button key={num} onClick={() => setInputValue(prev => prev + num)} className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-bold active:scale-95 transition-transform">{num}</button>
-                ))}
-                <button onClick={() => setInputValue('0')} className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-bold active:scale-95 transition-transform">0</button>
-                <button onClick={() => setInputValue(prev => prev.slice(0, -1))} className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-xl font-bold active:scale-95 transition-transform">⌫</button>
-                <button onClick={saveScore} className="bg-blue-600 text-white py-3 rounded-xl text-xl font-bold active:scale-95 transition-transform shadow-md">✓</button>
+{/* --- Score Input Modal --- */}
+      {activeCell && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center pointer-events-auto">
+          {/* Blur Overlay - Click to dismiss */}
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setActiveCell(null)}
+          />
+          
+          {/* Modal Card - Elevated above blur, padded for bottom nav */}
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[2rem] p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] relative z-10 pb-24 animate-in slide-in-from-bottom-full duration-300">
+            
+            {/* Header / Display */}
+            <div className="text-center mb-6">
+              <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                {players.find(p => p.id === activeCell.playerId)?.name}
+              </p>
+              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-4">
+                {UPPER_CATEGORIES.find(c => c.id === activeCell.category)?.name || 
+                 LOWER_CATEGORIES.find(c => c.id === activeCell.category)?.name}
+              </h3>
+              
+              <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl py-4 px-6 mb-2 flex items-center justify-center min-h-[5rem]">
+                <span className={`text-5xl font-black tabular-nums ${inputValue ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-300 dark:text-slate-600'}`}>
+                  {inputValue || '-'}
+                </span>
               </div>
             </div>
+
+            {/* Dynamic Keypad Area */}
+            {(() => {
+              const options = getScoringOptions(activeCell.category);
+              
+              if (options === 'NUMPAD') {
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                      <button
+                        key={num}
+                        onClick={() => setInputValue(prev => prev.length < 3 ? prev + num : prev)}
+                        className="h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 text-2xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-sm"
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setInputValue('')}
+                      className="h-16 rounded-2xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold text-lg hover:bg-red-100 dark:hover:bg-red-900/40 active:scale-95 transition-all shadow-sm"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={() => setInputValue(prev => prev + '0')}
+                      className="h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 text-2xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all shadow-sm"
+                    >
+                      0
+                    </button>
+                    <button
+                      onClick={() => handleSaveScore(Number(inputValue))}
+                      className="h-16 rounded-2xl bg-indigo-600 text-white font-black text-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-200 dark:shadow-none flex items-center justify-center"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                );
+              }
+
+              // Pre-configured Options Array Layout (e.g. [0, 2, 4, 6, 8, 10])
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  {options.map((scoreOpt) => (
+                    <button
+                      key={scoreOpt}
+                      onClick={() => {
+                        setInputValue(scoreOpt.toString());
+                        // Optional: Auto-save when an exact option is tapped!
+                        // handleSaveScore(scoreOpt); 
+                      }}
+                      className={`h-16 rounded-2xl text-2xl font-bold active:scale-95 transition-all shadow-sm flex items-center justify-center ${
+                        inputValue === scoreOpt.toString() 
+                          ? 'bg-indigo-600 text-white shadow-md' 
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {scoreOpt}
+                    </button>
+                  ))}
+                  
+                  {/* Save Button spanning full width beneath the options */}
+                  <div className="col-span-2 pt-2">
+                    <button
+                      onClick={() => handleSaveScore(Number(inputValue))}
+                      disabled={!inputValue}
+                      className="w-full h-16 rounded-2xl bg-indigo-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-500 text-white font-black text-xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center justify-center"
+                    >
+                      Save Score
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
-        )}
+        </div>
+      )}
 
         <BottomNav />
       </div>
