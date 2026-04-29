@@ -3,21 +3,33 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { useGameState } from '../../hooks/useGameState'; 
 import BottomNav from '../components/BottomNav';
 
+// --- Types ---
+type Player = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
 type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
+
+// --- Constants ---
+const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 
 export default function YahtzeePage() {
   const router = useRouter();
-  
-  // --- State ---
+
+  // --- Core Game State (Using Local Storage Hook) ---
   const [phase, setPhase] = useState<'SETUP' | 'PLAYING'>('SETUP');
-  const [allPlayers, setAllPlayers] = useState<PlayerSnapshot[]>([]);
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
-  const [isTripleYahtzee, setIsTripleYahtzee] = useState(false);
+  const [players, setPlayers] = useGameState<Player[]>('yahtzee_players', []);
+  const [rounds, setRounds] = useGameState<any[]>('yahtzee_rounds', []); 
+  const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
+
+  // --- Roster & UI State ---
+  const [allAvailablePlayers, setAllAvailablePlayers] = useState<PlayerSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreatingPlayer, setIsCreatingPlayer] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
 
   // --- Fetch Global Roster ---
   useEffect(() => {
@@ -41,7 +53,7 @@ export default function YahtzeePage() {
           if (a.isCloudUser === b.isCloudUser) return a.name.localeCompare(b.name);
           return a.isCloudUser ? -1 : 1;
         });
-        setAllPlayers(roster);
+        setAllAvailablePlayers(roster);
       } catch (err) {
         console.error("Error fetching roster:", err);
       } finally {
@@ -51,25 +63,86 @@ export default function YahtzeePage() {
     fetchRoster();
   }, []);
 
-  // --- Actions ---
-  const togglePlayerSelection = (id: string) => {
-    setSelectedPlayerIds(prev => 
-      prev.includes(id) ? prev.filter(pId => pId !== id) : [...prev, id]
-    );
-  };
-
+  // --- Setup Actions ---
   const startGame = () => {
-    if (selectedPlayerIds.length === 0) return;
+    if (players.length === 0) return;
     
     // Set global active game flag so the BottomNav knows we are playing!
     const newGameId = `yahtzee_${Date.now()}`;
     window.localStorage.setItem('scorekeeper_active_game_id', newGameId);
     
-    // In the next step, we will generate the empty Yahtzee score map here.
+    // Placeholder to bypass the resume logic for now
+    if (rounds.length === 0) {
+      setRounds([{ roundId: 1, scores: {} }]);
+    }
     
     setPhase('PLAYING');
   };
 
+const addPlayer = async () => {
+    if (!newPlayerName.trim()) return;
+    
+    // 1. Create the new guest profile
+    const newId = `guest_${Date.now()}`;
+    const newPlayer: Player = {
+      id: newId,
+      name: newPlayerName.trim(),
+      emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+      isCloudUser: false
+    };
+
+    // 2. Instantly update local state so the UI feels fast
+    setPlayers([...players.filter(p => p && p.id), newPlayer]);
+    setAllAvailablePlayers(prev => [...prev, newPlayer]); // Add to roster queue
+    setNewPlayerName('');
+    setIsCreatingPlayer(false);
+
+    // 3. Background Sync to Firestore (Global Roster)
+    try {
+      await setDoc(doc(db, 'users', newId), {
+        name: newPlayer.name,
+        emoji: newPlayer.emoji,
+        isCloudUser: false,
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Error syncing new player to cloud:", err);
+    }
+  };
+
+  const movePlayer = (index: number, direction: 'UP' | 'DOWN') => {
+    const newPlayers = [...players];
+    if (direction === 'UP' && index > 0) {
+      [newPlayers[index - 1], newPlayers[index]] = [newPlayers[index], newPlayers[index - 1]];
+    } else if (direction === 'DOWN' && index < newPlayers.length - 1) {
+      [newPlayers[index + 1], newPlayers[index]] = [newPlayers[index], newPlayers[index + 1]];
+    }
+    setPlayers(newPlayers);
+  };
+
+  const updateEmoji = async (playerId: string, newEmoji: string) => {
+    // 1. Instantly update local state
+    setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    
+    // 2. Background Sync to Firestore (Only allow guest emoji changes)
+    const playerToUpdate = players.find(p => p.id === playerId) || allAvailablePlayers.find(p => p.id === playerId);
+    if (playerToUpdate && !playerToUpdate.isCloudUser) {
+      try {
+        await setDoc(doc(db, 'users', playerId), { emoji: newEmoji }, { merge: true });
+      } catch (err) {
+        console.error("Error syncing emoji update to cloud:", err);
+      }
+    }
+  };
+
+  const clearSetup = () => {
+    if (confirm('Are you sure you want to clear the setup? This will remove all selected players.')) {
+      setPlayers([]);
+      setRounds([]);
+      window.localStorage.removeItem('scorekeeper_active_game_id');
+    }
+  };
 
   // ==========================================
   // RENDER: PLAYING PHASE (The Grid Shell)
@@ -77,8 +150,6 @@ export default function YahtzeePage() {
   if (phase === 'PLAYING') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-32 font-sans text-slate-800 dark:text-slate-200">
-        
-        {/* Sticky Header with Gear Icon */}
         <div className="sticky top-0 z-20 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="max-w-screen-md mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -95,7 +166,6 @@ export default function YahtzeePage() {
                 </p>
               </div>
             </div>
-
             <div className="flex gap-2">
               {/* Future Edit Grid and Save buttons will go here */}
             </div>
@@ -112,111 +182,148 @@ export default function YahtzeePage() {
     );
   }
 
-  // ==========================================
+// ==========================================
   // RENDER: SETUP PHASE
   // ==========================================
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 font-sans text-slate-800 dark:text-slate-200 animate-in fade-in duration-300">
-      <div className="max-w-screen-md mx-auto p-4 space-y-6">
-        
-        {/* Setup Header */}
-        <div className="flex items-center justify-between mb-2">
-          <button onClick={() => router.push('/')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
-            <span className="text-xl">←</span> Back
-          </button>
-          <div className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest bg-slate-200/50 dark:bg-slate-800 px-3 py-1 rounded-full">
-            Game Setup
-          </div>
-        </div>
-
-        <h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-          <span>🎲</span> Yahtzee
-        </h1>
-
-        {/* Variant Toggle */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Game Rules</h2>
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-            <button
-              onClick={() => setIsTripleYahtzee(false)}
-              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${!isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-            >
-              Standard (1 Column)
-            </button>
-            <button
-              onClick={() => setIsTripleYahtzee(true)}
-              className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
-            >
-              Triple (3 Columns)
-            </button>
-          </div>
-        </div>
-
-        {/* Player Roster */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Select Players</h2>
-          
-          {isLoading ? (
-            <div className="text-center p-8 text-slate-400 font-medium animate-pulse">Loading Roster...</div>
-          ) : allPlayers.length === 0 ? (
-            <div className="text-center p-8 text-slate-500 font-medium bg-slate-50 dark:bg-slate-800 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-              No players found. Create a player in the Roster first!
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-              {allPlayers.map((player) => {
-                const isSelected = selectedPlayerIds.includes(player.id);
-                return (
-                  <button
-                    key={player.id}
-                    onClick={() => togglePlayerSelection(player.id)}
-                    className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all active:scale-95 ${
-                      isSelected 
-                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 shadow-sm' 
-                        : 'bg-slate-50 dark:bg-slate-800/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700 opacity-70 hover:opacity-100'
-                    }`}
-                  >
-                    {isSelected && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 text-white text-xs flex items-center justify-center rounded-full shadow-md border-2 border-white dark:border-slate-900 animate-in zoom-in">
-                        ✓
-                      </div>
-                    )}
-                    <div className="w-12 h-12 mb-2 rounded-full flex items-center justify-center text-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
-                      {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
-                        <img src={player.photoURL} alt={player.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span>{player.emoji || '👤'}</span>
-                      )}
-                    </div>
-                    <span className={`text-xs font-bold text-center w-full truncate ${isSelected ? 'text-blue-700 dark:text-blue-400' : 'text-slate-600 dark:text-slate-400'}`}>
-                      {player.name.split(' ')[0]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Start Game Action */}
-        <button
-          onClick={startGame}
-          disabled={selectedPlayerIds.length === 0}
-          className={`w-full py-4 rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-lg flex items-center justify-center gap-2
-            ${selectedPlayerIds.length > 0 
-              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/30 cursor-pointer' 
-              : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
-            }`}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 font-sans text-slate-800 dark:text-slate-200 animate-in fade-in slide-in-from-bottom-2">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <h1 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">🎲 Yahtzee Setup</h1>
+        <button 
+          onClick={startGame} 
+          disabled={players.length === 0}
+          className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${rounds?.length > 1 ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
         >
-          {selectedPlayerIds.length > 0 ? (
-            <>Start Game <span className="text-2xl leading-none">▶️</span></>
-          ) : (
-            'Select Players to Start'
-          )}
+          {rounds?.length > 1 ? '▶️ Resume Game' : '🚀 Start Game'}
         </button>
-
       </div>
-      <BottomNav />
+      
+      <div className="p-6 pt-[88px] max-w-screen-md mx-auto">
+
+        {/* Game Rules Component */}
+        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Game Rules</h2>
+        <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
+          <div>
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Game Variant</label>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button 
+                onClick={() => setIsTripleYahtzee(false)} 
+                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                Standard (1 Column)
+              </button>
+              <button 
+                onClick={() => setIsTripleYahtzee(true)} 
+                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+              >
+                Triple (3 Columns)
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Saved Roster Horizontal Scroll */}
+        <div className="flex justify-between items-end mb-2 ml-1 mt-6">
+          <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Saved Roster</h2>
+        </div>
+        
+        <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+          {isLoading ? (
+             <span className="text-slate-400 text-sm font-medium px-2 py-2">Loading cloud roster...</span>
+          ) : allAvailablePlayers
+            .filter(gp => gp && gp.id && !players.some(p => p && p.id === gp.id))
+            .map(gp => (
+            <button 
+              key={gp.id} 
+              onClick={() => setPlayers([...players.filter(p => p && p.id), gp])} 
+              className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
+            >
+              <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                {gp.isCloudUser && gp.photoURL && !gp.useCustomEmoji ? (
+                  <img src={gp.photoURL} alt={gp.name} className="w-full h-full object-cover rounded-full" />
+                ) : (
+                  <span>{gp.emoji || '👤'}</span>
+                )}
+              </span> 
+              {gp.name || 'Unknown'}
+              {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
+            </button>
+          ))}
+          
+          <button 
+            onClick={() => setIsCreatingPlayer(true)} 
+            className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 transition-all"
+          >
+            + New Player
+          </button>
+        </div>
+
+        {/* Create New Player Form */}
+        {isCreatingPlayer && (
+          <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
+            <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-emerald-500 font-bold dark:text-white" autoFocus />
+            <button onClick={addPlayer} className="bg-emerald-600 text-white px-5 rounded-xl font-bold">Add</button>
+            <button onClick={() => setIsCreatingPlayer(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
+          </div>
+        )}
+
+        {/* Current Active Players List */}
+        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Current Active Players</h2>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
+          {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : players.filter(p => p && p.id).map((p, i) => (
+            <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
+              <div className="flex items-center gap-3 p-4">
+                <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">
+                  {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+                    <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+                  ) : (
+                    <span>{p.emoji || '👤'}</span>
+                  )}
+                </button>
+                <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
+              </div>
+              <div className="flex items-stretch">
+                <button onClick={() => setPlayers(players.filter(activeP => activeP && activeP.id !== p.id))} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
+                <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 w-12">
+                  <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pb-1">▲</button>
+                  <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pt-1">▼</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {(players.length > 0) && (
+          <div className="flex justify-center mt-12 pb-12">
+            <button onClick={clearSetup} className="text-red-500 font-bold px-6 py-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-95 transition-all text-xs uppercase tracking-widest">
+              Clear Active Setup
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Emoji Picker Modal */}
+      {activeEmojiPicker && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
+              <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
+            </div>
+            <div className="grid grid-cols-5 gap-3">
+              {EMOJIS.map(emoji => (
+                <button 
+                  key={emoji} 
+                  onClick={() => { updateEmoji(activeEmojiPicker, emoji); setActiveEmojiPicker(null); }}
+                  className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
