@@ -43,15 +43,18 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const isCountDown = game.settings?.scoreDirection === 'DOWN';
   const standings = [...game.activePlayerIds]
         .map(pId => {
-          // Find the player's snapshot, or provide a fallback
+          // Find the player's snapshot, or provide a fallback with ALL expected fields
           const snapshot = game.playerSnapshots.find(p => p.id === pId) || {
             name: 'Unknown',
-            emoji: '👤'
+            emoji: '👤',
+            isCloudUser: false,
+            photoURL: undefined,
+            useCustomEmoji: false
           };
           
           return {
             ...snapshot,                       // 1. Spread the snapshot first
-            id: pId,                           // 2. Explicitly set the ID (overrides snapshot ID safely)
+            id: pId,                           // 2. Explicitly set the ID
             score: game.finalScores[pId] || 0, // 3. Set the score
           };
         })
