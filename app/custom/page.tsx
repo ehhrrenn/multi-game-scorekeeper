@@ -79,6 +79,11 @@ export default function CustomTracker() {
 
   useEffect(() => {
     async function fetchCloudRoster() {
+      if (!db) {
+        setCloudPlayers([]);
+        return;
+      }
+
       try {
         const querySnapshot = await getDocs(collection(db, 'Users'));
         const users = querySnapshot.docs.map(doc => {
@@ -351,12 +356,16 @@ const allAvailablePlayers = useMemo(() => {
     setGameHistory(prev => [gameRecord, ...prev]);
 
     // 2. Cloud Save (The Magic)
-    try {
-      // We use setDoc here to force the Document ID to exactly match your gameRecord.gameId
-      await setDoc(doc(db, 'Games', gameRecord.gameId), gameRecord);
-      console.log("Game successfully written to Cloud!");
-    } catch (error) {
-      console.error("Error saving game to Cloud:", error);
+    if (db) {
+      try {
+        // We use setDoc here to force the Document ID to exactly match your gameRecord.gameId
+        await setDoc(doc(db, 'Games', gameRecord.gameId), gameRecord);
+        console.log("Game successfully written to Cloud!");
+      } catch (error) {
+        console.error("Error saving game to Cloud:", error);
+      }
+    } else {
+      console.warn('Skipped cloud save: Firebase is not configured.');
     }
 
     // 3. Teardown Active Game State

@@ -62,6 +62,12 @@ export default function YahtzeePage() {
   // Fetch the Global Roster on Mount
   useEffect(() => {
     const fetchRoster = async () => {
+      if (!db) {
+        setGlobalRoster([]);
+        setIsFetchingRoster(false);
+        return;
+      }
+
       try {
         const querySnapshot = await getDocs(collection(db, 'users'));
         const users = querySnapshot.docs.map(doc => ({
@@ -112,7 +118,11 @@ export default function YahtzeePage() {
     setAllAvailablePlayers(prev => [...prev, newPlayer]);
     setNewPlayerName('');
     setIsCreatingPlayer(false);
-    try { await setDoc(doc(db, 'users', newId), { name: newPlayer.name, emoji: newPlayer.emoji, isCloudUser: false, createdAt: new Date().toISOString() }); } catch (err) {}
+    if (db) {
+      try {
+        await setDoc(doc(db, 'users', newId), { name: newPlayer.name, emoji: newPlayer.emoji, isCloudUser: false, createdAt: new Date().toISOString() });
+      } catch (err) {}
+    }
   };
 
   const movePlayer = (index: number, direction: 'UP' | 'DOWN') => {
@@ -126,7 +136,7 @@ export default function YahtzeePage() {
     setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
     setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
     const playerToUpdate = players.find(p => p.id === playerId) || allAvailablePlayers.find(p => p.id === playerId);
-    if (playerToUpdate && !playerToUpdate.isCloudUser) {
+    if (db && playerToUpdate && !playerToUpdate.isCloudUser) {
       try { await setDoc(doc(db, 'users', playerId), { emoji: newEmoji }, { merge: true }); } catch (err) {}
     }
   };

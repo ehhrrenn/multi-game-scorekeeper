@@ -54,6 +54,13 @@ export default function RosterPage() {
   // 3. Fetch from Firestore on mount
   useEffect(() => {
     async function fetchCloudData() {
+      if (!db) {
+        setCloudPlayers([]);
+        setCloudHistory([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const usersSnapshot = await getDocs(collection(db, 'Users'));
         const fetchedUsers = usersSnapshot.docs.map(doc => doc.data() as Player);

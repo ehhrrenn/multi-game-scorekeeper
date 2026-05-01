@@ -7,15 +7,22 @@ import { doc, setDoc } from 'firebase/firestore';
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const safeAuth = auth;
+  const safeDb = db;
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    if (!safeAuth || !safeDb) {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(safeAuth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
         
         // --- THE SYNC LOGIC ---
         // Create a reference to this user's specific document in the "Users" collection
-        const userRef = doc(db, 'Users', firebaseUser.uid);
+        const userRef = doc(safeDb, 'Users', firebaseUser.uid);
         
         // Write their data to the database
         await setDoc(userRef, {

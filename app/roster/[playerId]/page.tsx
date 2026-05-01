@@ -54,6 +54,13 @@ export default function PlayerProfilePage() {
   // 3. Fetch Cloud Data
   useEffect(() => {
     async function fetchCloudProfile() {
+      if (!db) {
+        setCloudPlayer(null);
+        setCloudHistory([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const userRef = doc(db, 'Users', playerId);
         const userSnap = await getDoc(userRef);
@@ -152,10 +159,14 @@ const handleSave = async () => {
   if (!player) return;
   
   if (player.isCloudUser) {
+    if (!db) {
+      console.warn('Skipped cloud profile update: Firebase is not configured.');
+      return;
+    }
+
     // 1. Save directly to Firestore for Cloud Users
     try {
       const userRef = doc(db, 'Users', player.id);
-      const { updateDoc } = await import('firebase/firestore');
       await updateDoc(userRef, {
         name: editName,
         emoji: editEmoji,
@@ -184,13 +195,18 @@ const handleDelete = () => {
   // --- ADMIN MERGE LOGIC ---
   const handleOpenMergeModal = async () => {
     setShowMergeModal(true);
+      if (!db) {
+        setAllCloudUsers([]);
+        return;
+      }
+
     // Fetch target users
     const usersSnap = await getDocs(collection(db, 'Users'));
     setAllCloudUsers(usersSnap.docs.map(d => d.data() as Player).filter(p => p.id !== playerId));
   };
 
   const executeMerge = async () => {
-    if (!targetMergeId) return;
+      if (!targetMergeId || !db) return;
     setIsMerging(true);
 
     try {

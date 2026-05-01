@@ -51,6 +51,12 @@ export default function HistoryPage() {
   // 3. Fetch from Firestore
   useEffect(() => {
     async function fetchCloudHistory() {
+      if (!db) {
+        setCloudHistory([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const gamesSnapshot = await getDocs(collection(db, 'Games'));
         const fetchedGames = gamesSnapshot.docs.map(doc => doc.data() as GameRecord);

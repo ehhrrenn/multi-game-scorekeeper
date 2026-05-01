@@ -1,22 +1,37 @@
 // app/components/AuthButton.tsx
 'use client';
 
-import { auth, db } from '../../lib/firebase';
+import { auth, db, firebaseConfigError, isFirebaseConfigured } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function AuthButton() {
   const { user, loading } = useAuth();
+  const safeAuth = auth;
+  const safeDb = db;
+
+  if (!isFirebaseConfigured || !safeAuth || !safeDb) {
+    return (
+      <button
+        type="button"
+        disabled
+        title={firebaseConfigError || 'Firebase is not configured'}
+        className="bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold py-2.5 px-5 rounded-full cursor-not-allowed"
+      >
+        Sign-in unavailable
+      </button>
+    );
+  }
 
   const handleLogin = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(safeAuth, provider);
       
       // Save or Update the user in our global 'users' cloud database
       if (result.user) {
-        await setDoc(doc(db, 'users', result.user.uid), {
+        await setDoc(doc(safeDb, 'users', result.user.uid), {
           name: result.user.displayName,
           email: result.user.email,
           photoURL: result.user.photoURL,
@@ -45,7 +60,7 @@ export default function AuthButton() {
           <span className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none mt-1 truncate max-w-[100px]">{user.displayName?.split(' ')[0]}</span>
         </div>
         <button 
-          onClick={() => signOut(auth)} 
+          onClick={() => signOut(safeAuth)} 
           className="ml-2 w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           title="Sign Out"
         >

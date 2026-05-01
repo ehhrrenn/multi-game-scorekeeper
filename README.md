@@ -16,6 +16,16 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Firebase Setup
+
+Authentication and cloud sync require Firebase web config env vars.
+
+1. Copy `.env.example` to `.env.local`.
+2. Fill in the Firebase values from your Firebase project settings.
+3. Restart the dev server.
+
+If these values are missing, the app now runs in local-only mode and disables cloud sign-in.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
