@@ -4,29 +4,19 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
-import { doc, setDoc } from 'firebase/firestore';
+import type { ActiveSession } from '../../hooks/useActiveSession';
+import { clearStoredGameState } from '../../lib/activeGameState';
 import { db } from '../../lib/firebase';
 import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useActiveSession } from '../../hooks/useActiveSession';
+import { buildCustomGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
-type PlayerSnapshot = { id: string; name: string; emoji: string };
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
-
-type GameRecord = {
-  gameId: string;
-  date: string;
-  gameName: string;
-  finalScores: Record<string, number>;
-  activePlayerIds: string[];
-  savedRounds: Round[];
-  playerSnapshots: PlayerSnapshot[];
-  settings?: GameSettings;
-};
 
 // --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
@@ -69,9 +59,12 @@ export default function CustomTracker() {
   
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
+  const [showSessionConflict, setShowSessionConflict] = useState(false);
 
   const router = useRouter();
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
+  const { activeSession, saveSession, clearSession } = useActiveSession();
+  const currentSessionId = activeSession?.gameType === 'custom' ? activeSession.sessionId : undefined;
   
   const isGameStarted = rounds.length > 1 || Object.values(rounds[0]?.scores || {}).some(score => score !== undefined && score !== null);
 
@@ -129,6 +122,19 @@ const allAvailablePlayers = useMemo(() => {
     }
   }, []);
 
+  useEffect(() => {
+    if (!players.length) {
+      return;
+    }
+
+    saveSession(
+      'custom',
+      players.filter((player) => player?.id).map((player) => player.id),
+      { players, rounds, activeGameName, settings, activeGameId },
+      currentSessionId
+    );
+  }, [activeGameId, activeGameName, currentSessionId, players, rounds, saveSession, settings]);
+
   const calculateTotal = (pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
     return settings.scoreDirection === 'DOWN' ? settings.target - sum : sum;
@@ -138,8 +144,9 @@ const allAvailablePlayers = useMemo(() => {
   const validPlayers = players.filter(p => p && p.id);
   
   // 2. Only check if the valid players have finished the round
-  const isRoundComplete = validPlayers.length > 0 && validPlayers.every(p => 
-    rounds[rounds.length - 1].scores[p.id] !== undefined && rounds[rounds.length - 1].scores[p.id] !== null
+  const lastRound = rounds[rounds.length - 1];
+  const isRoundComplete = Boolean(lastRound) && validPlayers.length > 0 && validPlayers.every(p => 
+    lastRound.scores[p.id] !== undefined && lastRound.scores[p.id] !== null
   );
 
   const { isGameOver, currentWinner } = useMemo(() => {
@@ -166,21 +173,28 @@ const allAvailablePlayers = useMemo(() => {
   }, [rounds, players, settings.target, settings.scoreDirection, isRoundComplete]);
 
   useEffect(() => {
-    if (players.length === 0 || rounds.length === 0 || isGameOver) return;
-
-    if (isRoundComplete) {
-      const timeout = setTimeout(() => {
-        setRounds(prev => {
-          const last = prev[prev.length - 1];
-          if (players.every(p => last.scores[p.id] !== undefined)) {
-            return [...prev, { roundId: last.roundId + 1, scores: {} }];
-          }
-          return prev;
-        });
-      }, 300);
-      return () => clearTimeout(timeout);
+    if (validPlayers.length === 0 || rounds.length === 0 || isGameOver || !isRoundComplete) {
+      return;
     }
-  }, [rounds, players, setRounds, isGameOver, isRoundComplete]);
+
+    const timeout = setTimeout(() => {
+      setRounds(prev => {
+        const currentLastRound = prev[prev.length - 1];
+        const shouldAppendRound = validPlayers.every(player => {
+          const score = currentLastRound?.scores[player.id];
+          return score !== undefined && score !== null;
+        });
+
+        if (!currentLastRound || !shouldAppendRound) {
+          return prev;
+        }
+
+        return [...prev, { roundId: currentLastRound.roundId + 1, scores: {} }];
+      });
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [isGameOver, isRoundComplete, rounds.length, setRounds, validPlayers]);
 
   useEffect(() => {
     if (isGameOver && !hasCelebrated && currentWinner) {
@@ -225,6 +239,9 @@ const allAvailablePlayers = useMemo(() => {
     setInputValue('0');
     setActiveGameId(null);
     setHasCelebrated(false);
+    if (activeSession?.gameType === 'custom') {
+      clearSession();
+    }
   };
 
   const addPlayer = async () => {
@@ -315,41 +332,81 @@ const allAvailablePlayers = useMemo(() => {
 
   const saveGame = () => {
     if (players.length === 0 || rounds.length === 0) return;
-    
-    const finalScores: Record<string, number> = {};
-    players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
-    
+
     const gameIdToUse = activeGameId || Date.now().toString();
     if (!activeGameId) setActiveGameId(gameIdToUse);
 
-    const newGame: GameRecord = {
-      gameId: gameIdToUse,
-      date: new Date().toLocaleDateString(),
-      gameName: activeGameName,
-      finalScores,
-      activePlayerIds: players.map(p => p.id),
-      savedRounds: JSON.parse(JSON.stringify(rounds)),
-      playerSnapshots: players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji })),
-      settings: { ...settings }
-    };
-    
-    if (activeGameId) {
-      setGameHistory(gameHistory.map(m => m.gameId === gameIdToUse ? newGame : m));
-    } else {
-      setGameHistory([newGame, ...gameHistory]);
+    const newGame = buildCustomGameRecord({
+      players,
+      rounds,
+      activeGameName,
+      settings,
+      activeGameId: gameIdToUse
+    }, gameIdToUse);
+
+    if (!newGame) {
+      return;
     }
+
+    setGameHistory(prev => upsertGameRecord(prev, newGame));
     
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  const handleStartNewGame = () => {
-    saveGame();
+  const handleStartNewGame = async () => {
+    const completedGame = buildCustomGameRecord({
+      players,
+      rounds,
+      activeGameName,
+      settings,
+      activeGameId
+    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+
+    if (completedGame) {
+      setGameHistory(prev => upsertGameRecord(prev, completedGame));
+      if (db) {
+        try {
+          await saveGameRecordToCloud(db, completedGame);
+        } catch (error) {
+          console.error('Error saving completed game to cloud:', error);
+        }
+      }
+    } else {
+      saveGame();
+    }
+
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveGameId(null);
     setHasCelebrated(false);
     setActiveCell(null);
     setInputValue('0');
+  };
+
+  const persistSessionToHistory = async (session: ActiveSession) => {
+    let gameRecord: GameRecord | null = null;
+
+    if (session.gameType === 'custom') {
+      gameRecord = buildCustomGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }
+
+    if (session.gameType === 'yahtzee') {
+      gameRecord = buildYahtzeeGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }
+
+    if (gameRecord) {
+      setGameHistory(prev => upsertGameRecord(prev, gameRecord!));
+      if (db) {
+        try {
+          await saveGameRecordToCloud(db, gameRecord);
+        } catch (error) {
+          console.error('Error saving replaced session to cloud:', error);
+        }
+      }
+    }
+
+    clearStoredGameState(session.gameType);
+    clearSession();
   };
 
   const handleSaveAndClose = async () => {
@@ -358,45 +415,63 @@ const allAvailablePlayers = useMemo(() => {
       return;
     }
 
-    // Generate a unique ID for this specific game
-    const newGameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const gameRecord = buildCustomGameRecord({
+      players,
+      rounds,
+      activeGameName,
+      settings,
+      activeGameId
+    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
 
-    const finalScores: Record<string, number> = {};
-    players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
-
-    const gameRecord: GameRecord = {
-      gameId: newGameId, // <-- Using the new gameId
-      date: new Date().toISOString(),
-      gameName: activeGameName,
-      finalScores,
-      activePlayerIds: players.map(p => p.id),
-      savedRounds: JSON.parse(JSON.stringify(rounds)),
-      playerSnapshots: players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji })),
-      settings: { ...settings }
-    };
-
-    // 1. Legacy Save (Keeps your app snappy & acts as offline backup)
-    setGameHistory(prev => [gameRecord, ...prev]);
-
-    // 2. Cloud Save (The Magic)
-    if (db) {
-      try {
-        // We use setDoc here to force the Document ID to exactly match your gameRecord.gameId
-        await setDoc(doc(db, 'Games', gameRecord.gameId), gameRecord);
-        console.log("Game successfully written to Cloud!");
-      } catch (error) {
-        console.error("Error saving game to Cloud:", error);
-      }
-    } else {
-      console.warn('Skipped cloud save: Firebase is not configured.');
+    if (!gameRecord) {
+      router.push('/history');
+      return;
     }
 
-    // 3. Teardown Active Game State
+    setGameHistory(prev => upsertGameRecord(prev, gameRecord));
+
+    if (db) {
+      try {
+        await saveGameRecordToCloud(db, gameRecord);
+      } catch (error) {
+        console.error('Error saving game to cloud:', error);
+      }
+    }
+
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveGameId(null);
     setHasCelebrated(false);
+    clearSession();
+    clearStoredGameState('custom');
     router.push('/history');
+  };
+
+  const handleStartOrResumeGame = () => {
+    if (players.length === 0) {
+      return;
+    }
+
+    if (activeSession?.gameType && activeSession.gameType !== 'custom') {
+      setShowSessionConflict(true);
+      return;
+    }
+
+    setViewMode('GRID');
+  };
+
+  const resolveSessionConflict = async (action: 'save' | 'delete') => {
+    if (activeSession?.gameType && activeSession.gameType !== 'custom') {
+      if (action === 'save') {
+        await persistSessionToHistory(activeSession);
+      } else {
+        clearStoredGameState(activeSession.gameType);
+        clearSession();
+      }
+    }
+
+    setShowSessionConflict(false);
+    setViewMode('GRID');
   };
 
   const handleCellTap = (roundId: number, playerId: string) => {
@@ -454,7 +529,7 @@ const allAvailablePlayers = useMemo(() => {
           <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white">🧮 Game Setup</h1>
             <button 
-              onClick={() => setViewMode('GRID')} 
+              onClick={handleStartOrResumeGame} 
               disabled={players.length === 0}
               className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${isGameStarted ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
             >
@@ -631,6 +706,26 @@ const allAvailablePlayers = useMemo(() => {
                       {emoji}
                     </button>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showSessionConflict && activeSession?.gameType && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowSessionConflict(false)} />
+              <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Active Game Found</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+                  A {activeSession.gameType === 'yahtzee' ? 'Yahtzee' : 'Custom Game'} session is already in progress. Save and close it, or delete it before starting this game.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button onClick={() => void resolveSessionConflict('save')} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all">
+                    Save & Close
+                  </button>
+                  <button onClick={() => void resolveSessionConflict('delete')} className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 py-3 rounded-xl font-bold active:scale-95 transition-all">
+                    Delete & Close
+                  </button>
                 </div>
               </div>
             </div>

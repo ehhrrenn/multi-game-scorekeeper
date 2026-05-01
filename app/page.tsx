@@ -53,10 +53,21 @@ export default function Home() {
   const gameInProgress = useMemo(() => players.length > 0, [players.length]);
 
   const recentGames = useMemo(() => {
+    const classicGameNames = new Set(['Yahtzee', 'Triple Yahtzee', 'Farkle']);
+    const customProfileNames = new Set(gameProfiles.map((profile) => profile.name));
     const uniqueGames = new Set<string>();
-    matchHistory.forEach(match => uniqueGames.add(match.gameName));
+    matchHistory.forEach(match => {
+      if (classicGameNames.has(match.gameName)) {
+        return;
+      }
+
+      if (customProfileNames.has(match.gameName)) {
+        uniqueGames.add(match.gameName);
+      }
+    });
+
     return Array.from(uniqueGames);
-  }, [matchHistory]);
+  }, [gameProfiles, matchHistory]);
 
   const calculateTotal = (playerId: string) => {
     const activeProfile = gameProfiles.find(p => p.name === gameName) || gameProfiles[0];

@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatFirstName } from '../../lib/cloudPlayers';
 
 // --- Types ---
 type PlayerSnapshot = {
@@ -14,6 +15,7 @@ type PlayerSnapshot = {
   useCustomEmoji?: boolean;
 };
 type Round = { roundId: number; scores: Record<string, number> };
+type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 type StandingsPlayer = PlayerSnapshot & { score: number };
 
@@ -24,6 +26,8 @@ export type GameRecord = {
   finalScores: Record<string, number>;
   activePlayerIds: string[];
   savedRounds?: Round[];
+  yahtzeeScores?: YahtzeeScoreMap;
+  isTripleYahtzee?: boolean;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
 };
@@ -59,9 +63,26 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
           };
         })
 
+  const displayPlayerName = (player: PlayerSnapshot) => player.isCloudUser ? formatFirstName(player.name) : player.name;
+
   const handleResume = (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.localStorage.setItem('scorekeeper_active_game_id', JSON.stringify(game.gameId));
+    const isYahtzeeGame = game.gameName === 'Yahtzee' || game.gameName === 'Triple Yahtzee' || Boolean(game.yahtzeeScores);
+
+    window.localStorage.setItem('scorekeeper_active_game_id', game.gameId);
+
+    if (isYahtzeeGame) {
+      const yahtzeePlayers = game.activePlayerIds
+        .map((id) => game.playerSnapshots.find((player) => player.id === id))
+        .filter((player): player is PlayerSnapshot => Boolean(player));
+
+      window.localStorage.setItem('yahtzee_players', JSON.stringify(yahtzeePlayers));
+      window.localStorage.setItem('yahtzee_scores_v2', JSON.stringify(game.yahtzeeScores || {}));
+      window.localStorage.setItem('yahtzee_is_triple', JSON.stringify(Boolean(game.isTripleYahtzee || game.gameName === 'Triple Yahtzee')));
+      router.push('/yahtzee');
+      return;
+    }
+
     window.localStorage.setItem('scorekeeper_gameName', JSON.stringify(game.gameName));
     window.localStorage.setItem('scorekeeper_settings', JSON.stringify(game.settings || { target: 0, scoreDirection: 'UP' }));
     
@@ -75,7 +96,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const handleShare = (e: React.MouseEvent) => {
     e.stopPropagation();
     const shareText = `🏆 ${game.gameName} Results:\n` + 
-      standings.map((s, i) => `${i + 1}. ${s.emoji} ${s.name}: ${s.score}`).join('\n');
+      standings.map((s, i) => `${i + 1}. ${s.emoji} ${displayPlayerName(s)}: ${s.score}`).join('\n');
 
     if (navigator.share) {
       navigator.share({ title: `${game.gameName} Results`, text: shareText })
@@ -104,7 +125,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
 
   const bestScore = standings[0]?.score;
   const winners = standings.filter(s => s.score === bestScore);
-  const winnerNames = winners.map(w => `${w.emoji} ${w.name}`).join(', ');
+  const winnerNames = winners.map(w => `${w.emoji} ${displayPlayerName(w)}`).join(', ');
 
   const formattedDate = (() => {
     const parsed = new Date(game.date);
@@ -149,12 +170,12 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto scrollbar-hide">
           {standings.map(p => (
             <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold whitespace-nowrap ${winners.some(w => w.id === p.id) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-              <span className="text-sm">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+              <span className="text-sm w-5 h-5 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</span>
-              <span className="max-w-[70px] truncate">{p.name}</span>
+              <span className="max-w-[70px] truncate">{displayPlayerName(p)}</span>
               <span className="opacity-40 ml-0.5">|</span>
               <span className="ml-0.5">{p.score}</span>
             </div>
@@ -198,12 +219,12 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                 <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0 border-slate-200 dark:border-slate-800">
                   <div className="flex items-center gap-3">
                     <span className={`font-black w-4 text-center ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 dark:text-slate-600'}`}>{i + 1}</span>
-                    <span className="text-xl">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+                    <span className="text-xl w-7 h-7 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{p.name}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200">{displayPlayerName(p)}</span>
                   </div>
                   <span className="font-black text-lg">{p.score}</span>
                 </div>
@@ -219,12 +240,12 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                     <th className="p-2 w-12 text-slate-500 border-b border-slate-200 dark:border-slate-700 font-normal">Rnd</th>
                     {standings.map(p => (
                       <th key={p.id} className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        <div className="text-lg">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
+                        <div className="text-lg w-7 h-7 flex items-center justify-center overflow-hidden mx-auto">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</div>
-                        <div className="text-[10px] font-bold uppercase text-slate-500 truncate max-w-[60px] mx-auto">{p.name}</div>
+                        <div className="text-[10px] font-bold uppercase text-slate-500 truncate max-w-[60px] mx-auto">{displayPlayerName(p)}</div>
                       </th>
                     ))}
                   </tr>
@@ -267,7 +288,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                       else runningTotal += (r.scores[p.id] || 0);
                       points.push(runningTotal);
                     });
-                    return { emoji: p.emoji, name: p.name, finalScore: runningTotal, points };
+                    return { emoji: p.emoji, name: p.name, isCloudUser: p.isCloudUser, finalScore: runningTotal, points };
                   });
                   
                   const allScores = pointsData.flatMap(d => d.points);
@@ -298,7 +319,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                       {/* ADDED PLAYER NAMES TO GRAPH LABELS */}
                       {labelData.map((d, i) => (
                         <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
-                           {d.finalScore} {d.emoji} {d.name.substring(0,6)}
+                          {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0,6)}
                         </text>
                       ))}
                     </>

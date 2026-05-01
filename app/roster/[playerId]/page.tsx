@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, collection, getDocs, updateDoc, query, where, writeBatch } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, collection, getDocs, updateDoc, query, where, writeBatch } from 'firebase/firestore';
 import { fetchCloudPlayersWithLegacy, formatFirstName } from '../../../lib/cloudPlayers';
 import { db } from '../../../lib/firebase';
 import { useGameState } from '../../../hooks/useGameState';
@@ -183,14 +183,33 @@ const handleSave = async () => {
   }
 };
 
-const handleDelete = () => {
+const handleDelete = async () => {
     setLocalPlayers(localPlayers.filter(p => p.id !== playerId));
+
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'users', playerId));
+      } catch (error) {
+        console.error('Error deleting player from cloud:', error);
+      }
+    }
+
     router.push('/roster');
   };
 
-  const handleDeleteGame = (gameId: string) => {
+  const handleDeleteGame = async (gameId: string) => {
     setLocalHistory(prev => prev.filter(game => game.gameId !== gameId));
     setCloudHistory(prev => prev.filter(game => game.gameId !== gameId));
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'Games', gameId));
+    } catch (error) {
+      console.error('Error deleting game from cloud:', error);
+    }
   };
 
   // --- ADMIN MERGE LOGIC ---

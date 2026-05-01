@@ -2,7 +2,8 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { formatFirstName } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState';
 import BottomNav from '../components/BottomNav';
@@ -118,11 +119,20 @@ export default function HistoryPage() {
     return winners;
   };
 
-  const handleDeleteGame = (gameIdToDelete: string) => {
-    // Note: To fully support cloud deletion, you will eventually add a deleteDoc() call here.
+  const handleDeleteGame = async (gameIdToDelete: string) => {
     setLocalHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
     setCloudHistory(prev => prev.filter(g => g.gameId !== gameIdToDelete));
     if (expandedGameId === gameIdToDelete) setExpandedGameId(null);
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'Games', gameIdToDelete));
+    } catch (error) {
+      console.error('Error deleting game from cloud:', error);
+    }
   };
 
   // --- Graph Data Calculation with Time Filter ---
@@ -258,7 +268,7 @@ export default function HistoryPage() {
                   {/* Replace the complex avatar logic with a simple text-only fallback for the dropdown */}
                   {uniquePlayers.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? '👤' : (p.emoji || '👤')} {p.name}
+                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? '👤' : (p.emoji || '👤')} {p.isCloudUser ? formatFirstName(p.name) : p.name}
                     </option>
                   ))}
                 </select>

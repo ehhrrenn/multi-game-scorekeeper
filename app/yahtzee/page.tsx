@@ -3,8 +3,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ActiveSession } from '../../hooks/useActiveSession';
+import { clearStoredGameState } from '../../lib/activeGameState';
 import { db } from '../../lib/firebase';
 import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
+import { buildCustomGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
 import { useGameState } from '../../hooks/useGameState'; 
 import BottomNav from '../components/BottomNav';
 import { useActiveSession } from '../../hooks/useActiveSession';
@@ -40,6 +43,7 @@ export default function YahtzeePage() {
   const [phase, setPhase] = useState<'SETUP' | 'PLAYING'>('SETUP');
   const [players, setPlayers] = useGameState<Player[]>('yahtzee_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
+  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
   const [scores, setScores] = useGameState<YahtzeeScoreMap>('yahtzee_scores_v2', {});
 
@@ -49,13 +53,26 @@ export default function YahtzeePage() {
   const [isCreatingPlayer, setIsCreatingPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
+  const [showSessionConflict, setShowSessionConflict] = useState(false);
+  const [showClearSetupConfirm, setShowClearSetupConfirm] = useState(false);
+  const [playingView, setPlayingView] = useState<'GRID' | 'GRAPH'>('GRID');
+  const [isSaved, setIsSaved] = useState(false);
   
   // --- Grid Interaction State ---
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('');
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
 
-  const { saveSession } = useActiveSession(); // Bring in our new global save function
+  const { activeSession, saveSession, clearSession } = useActiveSession();
+
+  const currentSessionId = activeSession?.gameType === 'yahtzee' ? activeSession.sessionId : undefined;
+  const hasInProgressGame = players.length > 0 || Object.keys(scores).length > 0;
+
+  useEffect(() => {
+    if (players.length > 0 && Object.keys(scores).length > 0) {
+      setPhase('PLAYING');
+    }
+  }, [players.length, scores]);
 
   // Fetch the Global Roster on Mount
   useEffect(() => {
@@ -80,9 +97,82 @@ export default function YahtzeePage() {
     fetchRoster();
   }, [globalRoster]);
 
+  useEffect(() => {
+    if (!hasInProgressGame) {
+      return;
+    }
+
+    saveSession(
+      'yahtzee',
+      players.filter((player) => player?.id).map((player) => player.id),
+      { players, scores, isTripleYahtzee, phase },
+      currentSessionId
+    );
+  }, [currentSessionId, hasInProgressGame, isTripleYahtzee, phase, players, saveSession, scores]);
+
+  const persistSessionToHistory = async (session: ActiveSession) => {
+    let gameRecord: GameRecord | null = null;
+
+    if (session.gameType === 'custom') {
+      gameRecord = buildCustomGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }
+
+    if (session.gameType === 'yahtzee') {
+      gameRecord = buildYahtzeeGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }
+
+    if (gameRecord) {
+      setGameHistory((prev) => upsertGameRecord(prev, gameRecord!));
+      if (db) {
+        try {
+          await saveGameRecordToCloud(db, gameRecord);
+        } catch (error) {
+          console.error('Error saving replaced session to cloud:', error);
+        }
+      }
+    }
+
+    clearStoredGameState(session.gameType);
+    clearSession();
+  };
+
+  const resolveSessionConflict = async (action: 'save' | 'delete') => {
+    if (activeSession?.gameType && activeSession.gameType !== 'yahtzee') {
+      if (action === 'save') {
+        await persistSessionToHistory(activeSession);
+      } else {
+        clearStoredGameState(activeSession.gameType);
+        clearSession();
+      }
+    }
+
+    setShowSessionConflict(false);
+    startGame(true);
+  };
+
+  const getOrCreateActiveGameId = () => {
+    if (typeof window === 'undefined') {
+      return `yahtzee_${Date.now()}`;
+    }
+
+    const existingId = window.localStorage.getItem('scorekeeper_active_game_id');
+    if (existingId && existingId.startsWith('yahtzee_')) {
+      return existingId;
+    }
+
+    const newId = `yahtzee_${Date.now()}`;
+    window.localStorage.setItem('scorekeeper_active_game_id', newId);
+    return newId;
+  };
+
   // --- Setup Actions ---
-  const startGame = () => {
+  const startGame = (skipConflictCheck = false) => {
     if (players.length === 0) return;
+
+    if (!skipConflictCheck && activeSession?.gameType && activeSession.gameType !== 'yahtzee') {
+      setShowSessionConflict(true);
+      return;
+    }
     
     // Initialize score map if starting fresh
     if (Object.keys(scores).length === 0) {
@@ -96,8 +186,48 @@ export default function YahtzeePage() {
       setScores(initialScores);
     }
     
-    window.localStorage.setItem('scorekeeper_active_game_id', `yahtzee_${Date.now()}`);
+    getOrCreateActiveGameId();
     setPhase('PLAYING');
+  };
+
+  const handleSaveAndClose = async () => {
+    const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee }, getOrCreateActiveGameId());
+    if (!gameRecord) {
+      router.push('/history');
+      return;
+    }
+
+    setGameHistory((prev) => upsertGameRecord(prev, gameRecord));
+
+    if (db) {
+      try {
+        await saveGameRecordToCloud(db, gameRecord);
+      } catch (error) {
+        console.error('Error saving Yahtzee game to cloud:', error);
+      }
+    }
+
+    setPlayers([]);
+    setScores({});
+    clearSession();
+    clearStoredGameState('yahtzee');
+    router.push('/history');
+  };
+
+  const handleSaveGame = () => {
+    const gameRecord = buildYahtzeeGameRecord({
+      players,
+      scores,
+      isTripleYahtzee
+    }, getOrCreateActiveGameId());
+
+    if (!gameRecord) {
+      return;
+    }
+
+    setGameHistory((prev) => upsertGameRecord(prev, gameRecord));
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
   };
 
   const addPlayer = async () => {
@@ -152,11 +282,21 @@ export default function YahtzeePage() {
   };
 
   const clearSetup = () => {
-    if (confirm('Are you sure you want to clear the setup? This will remove all selected players.')) {
-      setPlayers([]);
-      setScores({});
-      window.localStorage.removeItem('scorekeeper_active_game_id');
+    setShowClearSetupConfirm(true);
+  };
+
+  const confirmClearSetup = () => {
+    setPlayers([]);
+    setScores({});
+    window.localStorage.removeItem('scorekeeper_active_game_id');
+    if (activeSession?.gameType === 'yahtzee') {
+      clearSession();
     }
+    setShowClearSetupConfirm(false);
+  };
+
+  const cancelClearSetup = () => {
+    setShowClearSetupConfirm(false);
   };
 
   // --- Playing Actions & Calculations ---
@@ -219,6 +359,29 @@ export default function YahtzeePage() {
   const calcUpperTotal = (playerId: string, colIndex: number) => UPPER_CATEGORIES.reduce((sum, cat) => sum + (scores[playerId]?.[cat.id]?.[colIndex] || 0), 0);
   const calcUpperBonus = (upperTotal: number) => upperTotal >= 63 ? 35 : 0;
   const calcLowerTotal = (playerId: string, colIndex: number) => LOWER_CATEGORIES.reduce((sum, cat) => sum + (scores[playerId]?.[cat.id]?.[colIndex] || 0), 0);
+  const calcGrandTotal = (playerId: string) => {
+    let total = 0;
+    for (let colIdx = 0; colIdx < columnsPerPlayer; colIdx += 1) {
+      const upTotal = calcUpperTotal(playerId, colIdx);
+      const bonus = calcUpperBonus(upTotal);
+      const lowTotal = calcLowerTotal(playerId, colIdx);
+      const baseTotal = upTotal + bonus + lowTotal;
+      const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
+      total += baseTotal * multiplier;
+    }
+    return total;
+  };
+
+  const isGameComplete =
+    players.length > 0 &&
+    players.every((player) =>
+      [...UPPER_CATEGORIES, ...LOWER_CATEGORIES].every((category) =>
+        Array.from({ length: columnsPerPlayer }).every((_, colIdx) => {
+          const value = scores[player.id]?.[category.id]?.[colIdx];
+          return value !== null && value !== undefined;
+        })
+      )
+    );
 
   // Helper to generate the correct keypad options based on the active category
   const getScoringOptions = (categoryId: string) => {
@@ -251,45 +414,45 @@ export default function YahtzeePage() {
   if (phase === 'PLAYING') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[300px] font-sans text-slate-800 dark:text-slate-200">
-        
-        {/* Sticky Global Header */}
-        <div className="sticky top-0 z-30 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm pt-2">
-          <div className="max-w-screen-xl mx-auto px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setPhase('SETUP')} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-xl hover:bg-slate-100 active:scale-95 transition-all shadow-sm">
-                ⚙️
-              </button>
-              <div>
-                <h1 className="text-lg font-black leading-tight">Yahtzee</h1>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isTripleYahtzee ? 'Triple Variant' : 'Standard'}</p>
-              </div>
+        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+          <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee'}</h1>
+          <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+        </div>
+
+        <main className="max-w-screen-md mx-auto px-4 pt-[80px]">
+          <div className="sticky top-16 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
+              <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
             </div>
           </div>
 
-          {/* Sticky Player Column Headers */}
-          <div className="flex max-w-screen-xl mx-auto overflow-hidden pl-28 pr-4 pb-2 mt-2 gap-2">
-            {players.map((p) => (
-              <div key={p.id} className="flex-1 min-w-[80px] text-center flex flex-col items-center">
-                 <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-lg mb-1 shadow-sm overflow-hidden">
-                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
-                 </div>
-                 <div className="text-[10px] font-bold uppercase truncate w-full px-1">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
-                 {isTripleYahtzee && (
-                   <div className="flex w-full mt-1 text-[9px] font-black text-slate-400">
-                     <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
-                     <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X2</span>
-                     <span className="flex-1">X3</span>
-                   </div>
-                 )}
+          {playingView === 'GRID' && (
+            <div className="sticky top-[124px] z-20 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pb-2">
+              <div className="flex overflow-hidden pl-24 pr-1 pt-1 gap-2">
+                {players.map((p) => (
+                  <div key={p.id} className="flex-1 min-w-[80px] text-center flex flex-col items-center">
+                     <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-lg mb-1 shadow-sm overflow-hidden">
+                       {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
+                     </div>
+                     <div className="text-[10px] font-bold uppercase truncate w-full px-1">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
+                     {isTripleYahtzee && (
+                       <div className="flex w-full mt-1 text-[9px] font-black text-slate-400">
+                         <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
+                         <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X2</span>
+                         <span className="flex-1">X3</span>
+                       </div>
+                     )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
 
-        {/* The Grid Body */}
-        <main className="max-w-screen-xl mx-auto px-4 pt-4 overflow-x-auto">
+          <div className="overflow-x-auto">
           <div className="min-w-max pb-8">
-            
+            {playingView === 'GRID' ? (
+              <>
             {/* UPPER SECTION */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-6">
               <div className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">Upper Section</div>
@@ -386,6 +549,107 @@ export default function YahtzeePage() {
               ))}
             </div>
 
+            <div className="mt-4 mb-6">
+              <button
+                onClick={isGameComplete ? handleSaveAndClose : handleSaveGame}
+                className={`w-full py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+              >
+                <span>{isSaved && !isGameComplete ? '✅' : '💾'}</span> {isGameComplete ? 'Save & Close' : isSaved ? 'Saved!' : 'Save Game'}
+              </button>
+            </div>
+
+            </>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-4 animate-in fade-in">
+                <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
+                  {(() => {
+                    const categoryOrder = [...UPPER_CATEGORIES.map(c => c.id), ...LOWER_CATEGORIES.map(c => c.id)];
+                    const pointsData = players.map((p) => {
+                      let runningTotal = 0;
+                      const points = [0];
+
+                      for (let colIdx = 0; colIdx < columnsPerPlayer; colIdx += 1) {
+                        const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
+                        let upperTotal = 0;
+
+                        for (const categoryId of categoryOrder) {
+                          const value = scores[p.id]?.[categoryId]?.[colIdx] || 0;
+                          points.push(points[points.length - 1] + value * multiplier);
+                          runningTotal += value * multiplier;
+
+                          if (UPPER_CATEGORIES.some(cat => cat.id === categoryId)) {
+                            upperTotal += value;
+                          }
+                        }
+
+                        const bonus = calcUpperBonus(upperTotal) * multiplier;
+                        if (bonus > 0) {
+                          points.push(points[points.length - 1] + bonus);
+                          runningTotal += bonus;
+                        }
+                      }
+
+                      return { id: p.id, emoji: p.emoji, name: p.name, isCloudUser: p.isCloudUser, points, finalScore: runningTotal };
+                    });
+
+                    const allScores = pointsData.flatMap(d => d.points);
+                    const max = Math.max(...allScores, 10);
+                    const min = Math.min(...allScores, 0);
+                    const range = max - min || 1;
+                    const longestPath = Math.max(...pointsData.map(d => d.points.length), 1);
+                    const xStep = 400 / Math.max(longestPath - 1, 1);
+
+                    const labelData = pointsData
+                      .map((d) => {
+                        const finalY = 200 - ((d.finalScore - min) / range) * 200;
+                        return { ...d, targetY: finalY };
+                      })
+                      .sort((a, b) => a.targetY - b.targetY);
+
+                    for (let i = 1; i < labelData.length; i += 1) {
+                      if (labelData[i].targetY - labelData[i - 1].targetY < 20) {
+                        labelData[i].targetY = labelData[i - 1].targetY + 20;
+                      }
+                    }
+
+                    const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'];
+
+                    return (
+                      <>
+                        {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" className="dark:stroke-slate-700" />}
+                        {pointsData.map((d, i) => (
+                          <polyline
+                            key={`line-${d.id}`}
+                            points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')}
+                            fill="none"
+                            stroke={colors[i % colors.length]}
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ))}
+                        {labelData.map((d, i) => (
+                          <text key={`label-${d.id}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
+                            {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0, 8)}
+                          </text>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </svg>
+
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-2">
+                  {players.map((player) => (
+                    <div key={player.id} className="bg-slate-50 dark:bg-slate-950 rounded-xl px-3 py-2 flex items-center justify-between">
+                      <span className="font-bold text-sm truncate">{player.isCloudUser ? formatFirstName(player.name) : player.name}</span>
+                      <span className="font-black text-base">{calcGrandTotal(player.id)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
           </div>
         </main>
 
@@ -434,14 +698,6 @@ export default function YahtzeePage() {
                       </button>
                     ))}
                     
-                    {/* Clear Button (Replaces +/- from Custom Game) */}
-                    <button
-                      onClick={() => setInputValue('')}
-                      className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-lg font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
-                    >
-                      Clear
-                    </button>
-                    
                     <button
                       onClick={() => setInputValue(prev => prev + '0')}
                       className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
@@ -476,29 +732,48 @@ export default function YahtzeePage() {
                       {scoreOpt}
                     </button>
                   ))}
-                  
-                  {/* Dedicated Clear Button for fixed option grids */}
-                  <button
-                    onClick={() => setInputValue('')}
-                    className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-lg font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95 col-span-full mt-1"
-                  >
-                    Clear
-                  </button>
                 </div>
               );
             })()}
 
-            {/* Match Custom Game Submit Button exactly */}
-            <button
-              onClick={() => handleSaveScore(Number(inputValue))}
-              disabled={inputValue === ''}
-              className="w-full mt-3 bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white py-3.5 rounded-xl text-lg font-bold active:bg-blue-700 transition-all active:scale-95 shadow-md shadow-blue-500/20"
-            >
-              Enter Score
-            </button>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <button
+                onClick={() => setInputValue('')}
+                className="w-full bg-red-50 dark:bg-red-900/20 text-red-500 py-3.5 rounded-xl text-lg font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => handleSaveScore(Number(inputValue))}
+                disabled={inputValue === ''}
+                className="w-full bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white py-3.5 rounded-xl text-lg font-bold active:bg-blue-700 transition-all active:scale-95 shadow-md shadow-blue-500/20"
+              >
+                Enter Score
+              </button>
+            </div>
 
           </div>
         </>
+      )}
+
+      {showSessionConflict && activeSession?.gameType && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowSessionConflict(false)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Active Game Found</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+              A {activeSession.gameType === 'custom' ? 'Custom Game' : 'Yahtzee'} session is already in progress. Save and close it, or delete it before starting Yahtzee.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => void resolveSessionConflict('save')} className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-all">
+                Save & Close
+              </button>
+              <button onClick={() => void resolveSessionConflict('delete')} className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 py-3 rounded-xl font-bold active:scale-95 transition-all">
+                Delete & Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
         <BottomNav />
@@ -514,7 +789,7 @@ export default function YahtzeePage() {
       <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
         <h1 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">🎲 Yahtzee Setup</h1>
         <button 
-          onClick={startGame} 
+          onClick={() => startGame()} 
           disabled={players.length === 0}
           className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${Object.keys(scores).length > 0 ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
         >
@@ -620,6 +895,27 @@ export default function YahtzeePage() {
                   {emoji}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearSetupConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={cancelClearSetup} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="text-4xl text-center mb-4">⚠️</div>
+            <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Clear Setup?</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
+              This will remove all selected players and clear the active Yahtzee board.
+            </p>
+            <div className="flex flex-col gap-3">
+              <button onClick={confirmClearSetup} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200/30 dark:shadow-none active:scale-95 transition">
+                🗑️ Clear Setup
+              </button>
+              <button onClick={cancelClearSetup} className="w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold py-3 mt-2">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
