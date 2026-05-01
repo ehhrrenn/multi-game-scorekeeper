@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
 import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { useActiveSession } from '../../hooks/useActiveSession';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };

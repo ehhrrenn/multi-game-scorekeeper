@@ -1,28 +1,19 @@
 // app/components/BottomNav.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useActiveSession } from '../../hooks/useActiveSession';
 
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
-  const [hasActiveGame, setHasActiveGame] = useState(false);
+  
+  // Bring in our new global session hook
+  const { activeSession } = useActiveSession();
 
-  // Force the Nav Bar to check local storage every time the page changes
-  useEffect(() => {
-    const checkActiveGame = () => {
-      const activeId = window.localStorage.getItem('scorekeeper_active_game_id');
-      // If activeId exists and isn't literally the string "null", show the button
-      setHasActiveGame(!!activeId && activeId !== 'null' && activeId !== '""');
-    };
-
-    checkActiveGame();
-    
-    // Fallback: Listen for cross-tab storage changes
-    window.addEventListener('storage', checkActiveGame);
-    return () => window.removeEventListener('storage', checkActiveGame);
-  }, [pathname]);
+  // Determine where the "Resume" button should go based on the global session
+  const resumeUrl = activeSession?.gameType ? `/${activeSession.gameType}` : '#';
+  const hasActiveSession = !!activeSession;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-screen-md px-4 pointer-events-none flex justify-center">
@@ -55,10 +46,10 @@ export default function BottomNav() {
         </button>
 
         {/* Resume Button */}
-        {hasActiveGame && (
+        {hasActiveSession && (
           <div className="pl-4 sm:pl-6 border-l border-slate-200 dark:border-slate-700 flex items-center animate-in slide-in-from-right-4 fade-in duration-300">
             <button 
-              onClick={() => router.push('/custom')}
+              onClick={() => router.push(resumeUrl)}
               className="flex items-center gap-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 px-5 py-2.5 rounded-full transition-all active:scale-95 shadow-md shadow-blue-500/30"
             >
               Resume <span className="text-xl">▶️</span>

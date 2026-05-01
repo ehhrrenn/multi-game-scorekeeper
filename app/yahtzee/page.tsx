@@ -7,6 +7,7 @@ import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState'; 
 import BottomNav from '../components/BottomNav';
+import { useActiveSession } from '../../hooks/useActiveSession';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
@@ -53,58 +54,35 @@ export default function YahtzeePage() {
   const [inputValue, setInputValue] = useState('');
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
 
-  // --- Fetch Global Roster ---
+  const { saveSession } = useActiveSession(); // Bring in our new global save function
+  const [globalRoster, setGlobalRoster] = useState<any[]>([]);
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
+  const [isFetchingRoster, setIsFetchingRoster] = useState(true);
+
+  // Fetch the Global Roster on Mount
   useEffect(() => {
     const fetchRoster = async () => {
       try {
-        // 1. Fetch Cloud Roster
-        const usersSnap = await getDocs(collection(db, 'users'));
-        const mergedRoster: PlayerSnapshot[] = [];
-        
-        usersSnap.forEach(doc => {
-          const d = doc.data();
-          mergedRoster.push({
-            id: doc.id,
-            name: d.name || 'Unknown',
-            emoji: d.emoji || '👤',
-            photoURL: d.photoURL,
-            // Check: If they are NOT explicitly saved as a guest (false), treat them as a Cloud User
-            isCloudUser: d.isCloudUser !== false, 
-            useCustomEmoji: d.useCustomEmoji || false
-          });
-        });
-
-        // 2. Fetch Local MVP Roster (Merge legacy players not yet synced to the cloud)
-        try {
-          const localRaw = window.localStorage.getItem('scorekeeper_global_roster');
-          if (localRaw) {
-            const localPlayers: PlayerSnapshot[] = JSON.parse(localRaw);
-            localPlayers.forEach(lp => {
-              if (!mergedRoster.some(cp => cp.id === lp.id)) {
-                mergedRoster.push({ ...lp, isCloudUser: false });
-              }
-            });
-          }
-        } catch (e) {
-          console.error("Local roster parse error:", e);
-        }
-
-        // 3. Sort: Cloud users first, then alphabetically
-        mergedRoster.sort((a, b) => {
-          if (a.isCloudUser === b.isCloudUser) return a.name.localeCompare(b.name);
-          return a.isCloudUser ? -1 : 1;
-        });
-
-        setAllAvailablePlayers(mergedRoster);
-      } catch (err) {
-        console.error("Error fetching roster:", err);
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const users = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setGlobalRoster(users);
+      } catch (error) {
+        console.error("Error fetching roster:", error);
       } finally {
-        setIsLoading(false);
+        setIsFetchingRoster(false);
       }
     };
-    
     fetchRoster();
   }, []);
+
+  const togglePlayerSelection = (playerId: string) => {
+    setSelectedPlayerIds(prev => 
+      prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+    );
+  };
 
   // --- Setup Actions ---
   const startGame = () => {
