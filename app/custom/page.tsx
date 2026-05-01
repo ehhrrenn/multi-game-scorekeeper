@@ -4,8 +4,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
-import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useActiveSession } from '../../hooks/useActiveSession';
 
 // --- Types ---
@@ -85,18 +86,8 @@ export default function CustomTracker() {
       }
 
       try {
-        const querySnapshot = await getDocs(collection(db, 'Users'));
-        const users = querySnapshot.docs.map(doc => {
-          const data = doc.data();
-          return { 
-             id: doc.id, // Guarantee a strict ID
-             name: data.name || 'Unknown User', // Fallback to prevent crash
-             emoji: data.emoji || '👤',
-             ...data, 
-             isCloudUser: true 
-          } as Player;
-        });
-        setCloudPlayers(users);
+        const users = await fetchCloudPlayersWithLegacy(db);
+        setCloudPlayers(users as Player[]);
       } catch (error) {
         console.error("Error fetching cloud users:", error);
       }
@@ -108,15 +99,14 @@ const allAvailablePlayers = useMemo(() => {
     // 1. We combine the local saved roster and cloud roster. 
     // MAKE SURE your local storage variable here is actually named 'globalRoster' 
     // (or whatever variable your 'scorekeeper_global_roster' useGameState uses!)
-    const combined = [...(globalRoster || []), ...cloudPlayers].filter(p => p && p.id);
+    const combined = mergePlayersById((globalRoster || []), cloudPlayers).filter(p => p && p.id);
     
     // 2. Safely deduplicate by ID so you don't get doubles
-    return Array.from(new Map(combined.map(p => [p.id, p])).values())
-      .sort((a, b) => {
-        const nameA = a.name || '';
-        const nameB = b.name || '';
-        return nameA.localeCompare(nameB);
-      });
+    return combined.sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    });
   }, [globalRoster, cloudPlayers]); // <-- Dependencies must be globalRoster and cloudPlayers
 
   useEffect(() => {
@@ -237,7 +227,7 @@ const allAvailablePlayers = useMemo(() => {
     setHasCelebrated(false);
   };
 
-  const addPlayer = () => {
+  const addPlayer = async () => {
     const trimmedName = newPlayerName.trim();
     if (!trimmedName) { setIsCreatingPlayer(false); return; }
 
@@ -245,9 +235,24 @@ const allAvailablePlayers = useMemo(() => {
     if (existingGlobal) {
       if (!players.find(p => p.id === existingGlobal.id)) setPlayers([...players, existingGlobal]);
     } else {
-      const newPlayer = { id: Date.now().toString(), name: trimmedName, emoji: getRandomEmoji() };
+      const newPlayer = { id: createGuestPlayerId(), name: trimmedName, emoji: getRandomEmoji(), isCloudUser: true, isGuest: true };
       setGlobalRoster([...globalRoster, newPlayer]);
       setPlayers([...players, newPlayer]);
+
+      if (db) {
+        try {
+          await upsertCloudPlayer(db, {
+            id: newPlayer.id,
+            name: newPlayer.name,
+            emoji: newPlayer.emoji,
+            isCloudUser: true,
+            isGuest: true,
+            isAuthUser: false
+          });
+        } catch (error) {
+          console.error('Error syncing player to cloud:', error);
+        }
+      }
     }
     setNewPlayerName('');
     setIsCreatingPlayer(false);
@@ -269,7 +274,7 @@ const allAvailablePlayers = useMemo(() => {
     setPlayers(newPlayers);
   };
 
-  const updateEmoji = (playerId: string, newEmoji: string) => {
+  const updateEmoji = async (playerId: string, newEmoji: string) => {
     const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p);
     setPlayers(updatedPlayers);
     setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
@@ -277,6 +282,24 @@ const allAvailablePlayers = useMemo(() => {
       ...game,
       playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p)
     })));
+
+    const playerToUpdate = updatedPlayers.find(p => p.id === playerId);
+    if (db && playerToUpdate) {
+      try {
+        await upsertCloudPlayer(db, {
+          id: playerToUpdate.id,
+          name: playerToUpdate.name,
+          emoji: newEmoji,
+          photoURL: playerToUpdate.photoURL,
+          useCustomEmoji: playerToUpdate.useCustomEmoji,
+          isCloudUser: true,
+          isGuest: !playerToUpdate.photoURL,
+          isAuthUser: Boolean(playerToUpdate.photoURL)
+        });
+      } catch (error) {
+        console.error('Error syncing emoji to cloud:', error);
+      }
+    }
   };
 
   const addRound = () => {
@@ -404,7 +427,7 @@ const allAvailablePlayers = useMemo(() => {
         <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-500 flex items-center justify-center">
             <h2 className="text-5xl font-black text-white drop-shadow-2xl animate-bounce z-10 text-center px-4">
-              {currentWinner?.name} Wins!
+              {(currentWinner?.isCloudUser ? formatFirstName(currentWinner?.name) : currentWinner?.name)} Wins!
             </h2>
           </div>
           {rainDrops.map(drop => (
@@ -535,7 +558,7 @@ const allAvailablePlayers = useMemo(() => {
                     ) : (
                       <span>{gp.emoji || '👤'}</span>
                     )}
-                    </span> {gp.name || 'Unknown'}
+                    </span> {gp.isCloudUser ? formatFirstName(gp.name) : (gp.name || 'Unknown')}
                   {/* Small cloud indicator for Firebase users */}
                   {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
                 </button>
@@ -568,7 +591,7 @@ const allAvailablePlayers = useMemo(() => {
                     ) : (
                       <span>{p.emoji || '👤'}</span>
                     )}</button>
-                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
+                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.isCloudUser ? formatFirstName(p.name) : p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
                   </div>
                   <div className="flex items-stretch">
                     {/* Bulletproof Removal Logic directly targets the active 'players' state */}
@@ -657,8 +680,8 @@ const allAvailablePlayers = useMemo(() => {
                                   )}
                                 </div>
                                 {/* Truncate ensures really long names don't break the layout if First Name fails */}
-                                <div className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
-                                  {p.name.split(' ')[0]}
+                                  <div className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
+                                  {p.isCloudUser ? formatFirstName(p.name) : p.name.split(' ')[0]}
                                 </div>
                               </div>
                             </th>

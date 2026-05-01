@@ -3,7 +3,7 @@
 
 import { auth, db, firebaseConfigError, isFirebaseConfigured } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { formatFirstName, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function AuthButton() {
@@ -29,14 +29,17 @@ export default function AuthButton() {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(safeAuth, provider);
       
-      // Save or Update the user in our global 'users' cloud database
       if (result.user) {
-        await setDoc(doc(safeDb, 'users', result.user.uid), {
-          name: result.user.displayName,
-          email: result.user.email,
-          photoURL: result.user.photoURL,
+        await upsertCloudPlayer(safeDb, {
+          id: result.user.uid,
+          name: result.user.displayName || 'Anonymous Player',
+          emoji: '👤',
+          photoURL: result.user.photoURL || '',
+          isCloudUser: true,
+          isGuest: false,
+          isAuthUser: true,
           lastLogin: new Date().toISOString()
-        }, { merge: true }); // Merge true ensures we don't overwrite existing stats later!
+        });
       }
     } catch (error) {
       console.error("Google Login failed:", error);
@@ -57,7 +60,7 @@ export default function AuthButton() {
         />
         <div className="flex flex-col">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Player 1</span>
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none mt-1 truncate max-w-[100px]">{user.displayName?.split(' ')[0]}</span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none mt-1 truncate max-w-[100px]">{formatFirstName(user.displayName || '')}</span>
         </div>
         <button 
           onClick={() => signOut(safeAuth)} 

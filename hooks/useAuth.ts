@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { upsertCloudPlayer } from '../lib/cloudPlayers';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -20,22 +20,16 @@ export function useAuth() {
       if (firebaseUser) {
         setUser(firebaseUser);
         
-        // --- THE SYNC LOGIC ---
-        // Create a reference to this user's specific document in the "Users" collection
-        const userRef = doc(safeDb, 'Users', firebaseUser.uid);
-        
-        // Write their data to the database
-        await setDoc(userRef, {
+        await upsertCloudPlayer(safeDb, {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || 'Anonymous Player',
-          email: firebaseUser.email || '',
+          emoji: '👤',
           photoURL: firebaseUser.photoURL || '',
-          emoji: '👤', // Fallback for UI elements that still expect an emoji
+          isCloudUser: true,
           isGuest: false,
-          lastLogin: new Date()
-        }, { merge: true }); 
-        // Note: { merge: true } is crucial! It ensures we only update these specific fields 
-        // without accidentally wiping out any other stats we might attach to this document later.
+          isAuthUser: true,
+          lastLogin: new Date().toISOString()
+        });
         
       } else {
         setUser(null);

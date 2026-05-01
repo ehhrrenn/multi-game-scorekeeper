@@ -1,10 +1,10 @@
 // app/yahtzee/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useGameState } from '../../hooks/useGameState'; 
 import BottomNav from '../components/BottomNav';
 import { useActiveSession } from '../../hooks/useActiveSession';
@@ -39,6 +39,7 @@ export default function YahtzeePage() {
   // --- Core Game State ---
   const [phase, setPhase] = useState<'SETUP' | 'PLAYING'>('SETUP');
   const [players, setPlayers] = useGameState<Player[]>('yahtzee_players', []);
+  const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
   const [scores, setScores] = useGameState<YahtzeeScoreMap>('yahtzee_scores_v2', {});
 
@@ -55,40 +56,29 @@ export default function YahtzeePage() {
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
 
   const { saveSession } = useActiveSession(); // Bring in our new global save function
-  const [globalRoster, setGlobalRoster] = useState<any[]>([]);
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
-  const [isFetchingRoster, setIsFetchingRoster] = useState(true);
 
   // Fetch the Global Roster on Mount
   useEffect(() => {
     const fetchRoster = async () => {
       if (!db) {
-        setGlobalRoster([]);
-        setIsFetchingRoster(false);
+        setAllAvailablePlayers(globalRoster);
+        setIsLoading(false);
         return;
       }
 
       try {
-        const querySnapshot = await getDocs(collection(db, 'users'));
-        const users = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setGlobalRoster(users);
+        const cloudPlayers = await fetchCloudPlayersWithLegacy(db);
+        const merged = mergePlayersById(globalRoster, cloudPlayers as Player[]);
+        setAllAvailablePlayers(merged);
       } catch (error) {
         console.error("Error fetching roster:", error);
+        setAllAvailablePlayers(globalRoster);
       } finally {
-        setIsFetchingRoster(false);
+        setIsLoading(false);
       }
     };
     fetchRoster();
-  }, []);
-
-  const togglePlayerSelection = (playerId: string) => {
-    setSelectedPlayerIds(prev => 
-      prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
-    );
-  };
+  }, [globalRoster]);
 
   // --- Setup Actions ---
   const startGame = () => {
@@ -112,15 +102,23 @@ export default function YahtzeePage() {
 
   const addPlayer = async () => {
     if (!newPlayerName.trim()) return;
-    const newId = `guest_${Date.now()}`;
-    const newPlayer: Player = { id: newId, name: newPlayerName.trim(), emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)], isCloudUser: false };
+    const newId = createGuestPlayerId();
+    const newPlayer: Player = { id: newId, name: newPlayerName.trim(), emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)], isCloudUser: true };
     setPlayers([...players.filter(p => p && p.id), newPlayer]);
     setAllAvailablePlayers(prev => [...prev, newPlayer]);
+    setGlobalRoster(prev => mergePlayersById(prev, [newPlayer]));
     setNewPlayerName('');
     setIsCreatingPlayer(false);
     if (db) {
       try {
-        await setDoc(doc(db, 'users', newId), { name: newPlayer.name, emoji: newPlayer.emoji, isCloudUser: false, createdAt: new Date().toISOString() });
+        await upsertCloudPlayer(db, {
+          id: newId,
+          name: newPlayer.name,
+          emoji: newPlayer.emoji,
+          isCloudUser: true,
+          isGuest: true,
+          isAuthUser: false
+        });
       } catch (err) {}
     }
   };
@@ -135,9 +133,21 @@ export default function YahtzeePage() {
   const updateEmoji = async (playerId: string, newEmoji: string) => {
     setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
     setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    setGlobalRoster(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
     const playerToUpdate = players.find(p => p.id === playerId) || allAvailablePlayers.find(p => p.id === playerId);
-    if (db && playerToUpdate && !playerToUpdate.isCloudUser) {
-      try { await setDoc(doc(db, 'users', playerId), { emoji: newEmoji }, { merge: true }); } catch (err) {}
+    if (db && playerToUpdate) {
+      try {
+        await upsertCloudPlayer(db, {
+          id: playerId,
+          name: playerToUpdate.name,
+          emoji: newEmoji,
+          photoURL: playerToUpdate.photoURL,
+          useCustomEmoji: playerToUpdate.useCustomEmoji,
+          isCloudUser: true,
+          isGuest: !playerToUpdate.photoURL,
+          isAuthUser: Boolean(playerToUpdate.photoURL)
+        });
+      } catch (err) {}
     }
   };
 
@@ -263,7 +273,7 @@ export default function YahtzeePage() {
                  <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-lg mb-1 shadow-sm overflow-hidden">
                    {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
                  </div>
-                 <div className="text-[10px] font-bold uppercase truncate w-full px-1">{p.name}</div>
+                 <div className="text-[10px] font-bold uppercase truncate w-full px-1">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
                  {isTripleYahtzee && (
                    <div className="flex w-full mt-1 text-[9px] font-black text-slate-400">
                      <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
@@ -398,7 +408,7 @@ export default function YahtzeePage() {
             {/* Header / Display */}
             <div className="mb-4">
               <p className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                {players.find(p => p.id === activeCell.playerId)?.name} • {UPPER_CATEGORIES.find(c => c.id === activeCell.category)?.name || LOWER_CATEGORIES.find(c => c.id === activeCell.category)?.name}
+                {(players.find(p => p.id === activeCell.playerId)?.isCloudUser ? formatFirstName(players.find(p => p.id === activeCell.playerId)?.name) : players.find(p => p.id === activeCell.playerId)?.name)} • {UPPER_CATEGORIES.find(c => c.id === activeCell.category)?.name || LOWER_CATEGORIES.find(c => c.id === activeCell.category)?.name}
               </p>
               <div className="flex justify-between items-center">
                 <div className="flex-1 text-center text-4xl font-black py-2 bg-slate-50 dark:bg-slate-950 rounded-xl shadow-inner border border-slate-100 dark:border-slate-800 tracking-tight text-blue-600 dark:text-blue-400">
@@ -544,7 +554,7 @@ export default function YahtzeePage() {
               <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                 {gp.isCloudUser && gp.photoURL && !gp.useCustomEmoji ? <img src={gp.photoURL} alt={gp.name} referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" /> : <span>{gp.emoji || '👤'}</span>}
               </span> 
-              {gp.name || 'Unknown'}
+              {gp.isCloudUser ? formatFirstName(gp.name) : (gp.name || 'Unknown')}
               {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
             </button>
           ))}
@@ -570,7 +580,7 @@ export default function YahtzeePage() {
                 <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">
                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" /> : <span>{p.emoji || '👤'}</span>}
                 </button>
-                <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
+                <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.isCloudUser ? formatFirstName(p.name) : p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
               </div>
               <div className="flex items-stretch">
                 <button onClick={() => setPlayers(players.filter(activeP => activeP && activeP.id !== p.id))} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>

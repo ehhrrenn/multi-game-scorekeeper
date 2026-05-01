@@ -4,6 +4,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
+import { fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState';
 
@@ -62,13 +63,12 @@ export default function RosterPage() {
       }
 
       try {
-        const usersSnapshot = await getDocs(collection(db, 'Users'));
-        const fetchedUsers = usersSnapshot.docs.map(doc => doc.data() as Player);
+        const fetchedUsers = await fetchCloudPlayersWithLegacy(db);
         
         const gamesSnapshot = await getDocs(collection(db, 'Games'));
         const fetchedGames = gamesSnapshot.docs.map(doc => doc.data() as MatchRecord);
 
-        setCloudPlayers(fetchedUsers);
+        setCloudPlayers(fetchedUsers as Player[]);
         setCloudHistory(fetchedGames);
       } catch (error) {
         console.error("Error fetching data from Firebase:", error);
@@ -82,9 +82,7 @@ export default function RosterPage() {
 
   // 4. Merge Local and Cloud Data safely
   const allPlayers = useMemo(() => {
-    const combined = [...localPlayers, ...cloudPlayers];
-    // Deduplicate by ID (in case a local player was already migrated to cloud)
-    return Array.from(new Map(combined.map(p => [p.id, p])).values());
+    return mergePlayersById(localPlayers, cloudPlayers);
   }, [localPlayers, cloudPlayers]);
 
   const allHistory = useMemo(() => {
@@ -227,7 +225,7 @@ return (
                   {/* Name and Topline Stats */}
                   <div className="flex-1 min-w-0">
                     <div className="text-lg font-black flex items-center gap-2 truncate">
-                      <span className="truncate">{p.name}</span>
+                      <span className="truncate">{p.isCloudUser ? formatFirstName(p.name) : p.name}</span>
                       {p.isCloudUser && <span className="text-xs flex-shrink-0 text-blue-500">☁️</span>}
                     </div>
                     <div className="text-xs text-slate-400 dark:text-slate-500 font-bold truncate">

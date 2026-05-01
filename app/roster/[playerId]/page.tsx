@@ -4,6 +4,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { doc, getDoc, collection, getDocs, updateDoc, query, where, writeBatch } from 'firebase/firestore';
+import { fetchCloudPlayersWithLegacy, formatFirstName } from '../../../lib/cloudPlayers';
 import { db } from '../../../lib/firebase';
 import { useGameState } from '../../../hooks/useGameState';
 import { useAuth } from '../../../hooks/useAuth';
@@ -62,7 +63,7 @@ export default function PlayerProfilePage() {
       }
 
       try {
-        const userRef = doc(db, 'Users', playerId);
+        const userRef = doc(db, 'users', playerId);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) setCloudPlayer(userSnap.data() as Player);
 
@@ -166,7 +167,7 @@ const handleSave = async () => {
 
     // 1. Save directly to Firestore for Cloud Users
     try {
-      const userRef = doc(db, 'Users', player.id);
+      const userRef = doc(db, 'users', player.id);
       await updateDoc(userRef, {
         name: editName,
         emoji: editEmoji,
@@ -201,8 +202,8 @@ const handleDelete = () => {
       }
 
     // Fetch target users
-    const usersSnap = await getDocs(collection(db, 'Users'));
-    setAllCloudUsers(usersSnap.docs.map(d => d.data() as Player).filter(p => p.id !== playerId));
+    const users = await fetchCloudPlayersWithLegacy(db);
+    setAllCloudUsers(users.filter(p => p.id !== playerId));
   };
 
   const executeMerge = async () => {
@@ -245,7 +246,7 @@ const handleDelete = () => {
       });
 
       // 4. Delete the ghost profile from Cloud Users (if it exists)
-      const oldUserRef = doc(db, 'Users', playerId);
+      const oldUserRef = doc(db, 'users', playerId);
       batch.delete(oldUserRef);
 
       // 5. Commit Cloud Changes
@@ -294,7 +295,7 @@ const handleDelete = () => {
             <div className="text-4xl text-center mb-4">🗑️</div>
             <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Delete Player?</h3>
             <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
-              This will permanently remove <span className="font-bold text-slate-700 dark:text-slate-200">{player.name}</span> from the roster, but their history will remain safe in the vault.
+              This will permanently remove <span className="font-bold text-slate-700 dark:text-slate-200">{player.isCloudUser ? formatFirstName(player.name) : player.name}</span> from the roster, but their history will remain safe in the vault.
             </p>
             <div className="flex flex-col gap-3">
               <button onClick={handleDelete} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 dark:shadow-none active:scale-95 transition">
@@ -315,7 +316,7 @@ const handleDelete = () => {
           <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Admin Merge</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              Move all of <b>{player.name}'s</b> history into a synced Cloud Account. This cannot be undone.
+              Move all of <b>{player.isCloudUser ? formatFirstName(player.name) : player.name}'s</b> history into a synced Cloud Account. This cannot be undone.
             </p>
             
             <select 
@@ -325,7 +326,7 @@ const handleDelete = () => {
             >
               <option value="" disabled>Select target account...</option>
               {allCloudUsers.map(u => (
-                <option key={u.id} value={u.id}>{u.name} {u.isGuest ? '(Guest)' : '(Google)'}</option>
+                <option key={u.id} value={u.id}>{u.isCloudUser ? formatFirstName(u.name) : u.name} {u.isGuest ? '(Guest)' : '(Google)'}</option>
               ))}
             </select>
 
@@ -427,7 +428,7 @@ const handleDelete = () => {
                   autoFocus
                 />
               ) : (
-                <h1 className="text-3xl font-black text-slate-800 dark:text-white truncate">{player.name}</h1>
+                <h1 className="text-3xl font-black text-slate-800 dark:text-white truncate">{player.isCloudUser ? formatFirstName(player.name) : player.name}</h1>
               )}
             </div>
           </div>
