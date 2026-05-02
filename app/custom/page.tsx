@@ -9,7 +9,9 @@ import { clearStoredGameState } from '../../lib/activeGameState';
 import { db } from '../../lib/firebase';
 import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useActiveSession } from '../../hooks/useActiveSession';
-import { buildCustomGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
+import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
+import PlayerSetupPanel from '../components/PlayerSetupPanel';
+import ScoreEntrySheet from '../components/ScoreEntrySheet';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };
@@ -394,6 +396,10 @@ const allAvailablePlayers = useMemo(() => {
       gameRecord = buildYahtzeeGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
     }
 
+    if (session.gameType === 'farkle') {
+      gameRecord = buildFarkleGameRecord(session.gameState, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }
+
     if (gameRecord) {
       setGameHistory(prev => upsertGameRecord(prev, gameRecord!));
       if (db) {
@@ -613,80 +619,27 @@ const allAvailablePlayers = useMemo(() => {
               </div>
             </div>
             
-            {/* SAVED ROSTER MOVED ABOVE ACTIVE PLAYERS */}
-            <div className="flex justify-between items-end mb-2 ml-1 mt-6">
-              <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Saved Roster</h2>
-            </div>
-            
-            <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
-              {allAvailablePlayers
-                .filter(gp => gp && gp.id && !players.some(p => p && p.id === gp.id))
-                .map(gp => (
-                <button 
-                  key={gp.id} 
-                  // Kept the safe direct-state update to prevent ghosts!
-                  onClick={() => setPlayers([...players.filter(p => p && p.id), gp])} 
-                  className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
-                >
-                  <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{gp.isCloudUser && gp.photoURL && !gp.useCustomEmoji ? (
-                      <img src={gp.photoURL} alt={gp.name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <span>{gp.emoji || '👤'}</span>
-                    )}
-                    </span> {gp.isCloudUser ? formatFirstName(gp.name) : (gp.name || 'Unknown')}
-                  {/* Small cloud indicator for Firebase users */}
-                  {gp.isCloudUser && <span className="text-blue-500 ml-1 text-xs">☁️</span>}
-                </button>
-              ))}
-              
-              {/* Your exact New Player button formatting restored */}
-              <button 
-                onClick={() => setIsCreatingPlayer(true)} 
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 transition-all"
-              >
-                + New Player
-              </button>
-            </div>
-
-            {isCreatingPlayer && (
-              <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
-                <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-emerald-500 font-bold dark:text-white" autoFocus />
-                <button onClick={addPlayer} className="bg-emerald-600 text-white px-5 rounded-xl font-bold">Add</button>
-                <button onClick={() => setIsCreatingPlayer(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
-              </div>
-            )}
-
-            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Current Active Players</h2>
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-              {players.length === 0 ? <div className="p-6 text-center text-slate-400 font-medium">No players added to the game yet. Select from the roster above.</div> : players.filter(p => p && p.id).map((p, i) => (
-                <div key={p.id} className={`flex items-stretch justify-between ${i !== players.length - 1 ? 'border-b border-slate-100 dark:border-slate-800' : ''}`}>
-                  <div className="flex items-center gap-3 p-4">
-                    <button onClick={() => setActiveEmojiPicker(p.id)} className="w-12 h-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full text-2xl flex items-center justify-center active:scale-95 transition shadow-sm dark:shadow-none">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                      <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
-                    ) : (
-                      <span>{p.emoji || '👤'}</span>
-                    )}</button>
-                    <span className="font-bold text-lg text-slate-700 dark:text-slate-200">{p.isCloudUser ? formatFirstName(p.name) : p.name}{p.isCloudUser && <span className="ml-2 text-sm">☁️</span>}</span>
+            <PlayerSetupPanel
+              rosterPlayers={allAvailablePlayers.filter(gp => gp && gp.id && !players.some(p => p && p.id === gp.id))}
+              activePlayers={players.filter(p => p && p.id)}
+              isLoading={false}
+              formatName={(p) => p.isCloudUser ? formatFirstName(p.name) : p.name}
+              onAddFromRoster={(gp) => setPlayers([...players.filter(p => p && p.id), gp])}
+              onRemove={(id) => setPlayers(players.filter(p => p && p.id !== id))}
+              onMove={movePlayer}
+              onEmojiClick={setActiveEmojiPicker}
+              onNewPlayerClick={() => setIsCreatingPlayer(true)}
+              onClearSetup={clearSetup}
+              createPlayerSlot={
+                isCreatingPlayer ? (
+                  <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
+                    <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-emerald-500 font-bold dark:text-white" autoFocus />
+                    <button onClick={addPlayer} className="bg-emerald-600 text-white px-5 rounded-xl font-bold">Add</button>
+                    <button onClick={() => setIsCreatingPlayer(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
                   </div>
-                  <div className="flex items-stretch">
-                    {/* Bulletproof Removal Logic directly targets the active 'players' state */}
-                    <button onClick={() => setPlayers(players.filter(activeP => activeP && activeP.id !== p.id))} className="px-4 text-slate-300 dark:text-slate-600 hover:text-red-500 transition-colors border-l border-slate-100 dark:border-slate-800">✕</button>
-                    <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 w-12">
-                      <button disabled={i === 0} onClick={() => movePlayer(i, 'UP')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pb-1">▲</button>
-                      <button disabled={i === players.length - 1} onClick={() => movePlayer(i, 'DOWN')} className="flex-1 flex items-center justify-center text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-20 transition-colors pt-1">▼</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {(players.length > 0 || rounds.length > 1 || activeGameName !== 'Custom Game') && (
-              <div className="flex justify-center mt-12 pb-12">
-                <button onClick={clearSetup} className="text-red-500 font-bold px-6 py-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 active:scale-95 transition-all text-xs uppercase tracking-widest">
-                  Clear Active Setup
-                </button>
-              </div>
-            )}
+                ) : undefined
+              }
+            />
           </div>
 
           {activeEmojiPicker && (
@@ -945,52 +898,49 @@ const allAvailablePlayers = useMemo(() => {
         </div>
       )}
 
-      {activeCell && viewMode === 'GRID' && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-[0_-10px_40px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t-2 border-slate-100 dark:border-slate-800 rounded-t-2xl p-4 pb-safe z-[60] animate-in slide-in-from-bottom-full max-w-screen-md mx-auto">
-          
-          <div className="flex justify-between items-center mb-3">
-             <div className="flex-1 text-center text-4xl font-black py-2 bg-slate-50 dark:bg-slate-950 rounded-xl shadow-inner border border-slate-100 dark:border-slate-800 tracking-tight">{inputValue}</div>
-          </div>
-          
-          <div className="grid grid-cols-3 gap-2">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-              <button 
-                key={num} 
-                onClick={() => setInputValue(p => p === '0' ? num.toString() : p === '-' ? '-' + num : p + num)} 
-                className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
-              >
-                {num}
-              </button>
-            ))}
-            
-            <button 
-              onClick={() => setInputValue(p => p === '0' ? '-' : p === '-' ? '0' : p.startsWith('-') ? p.substring(1) : '-' + p)} 
-              className="bg-slate-200 dark:bg-slate-700 py-3 rounded-xl text-lg font-bold active:bg-slate-300 dark:active:bg-slate-600"
+      <ScoreEntrySheet
+        open={!!(activeCell && viewMode === 'GRID')}
+        onClose={() => { setActiveCell(null); setInputValue('0'); }}
+        title={
+          activeCell
+            ? `${(() => { const p = players.find(pl => pl.id === activeCell.playerId); return p ? (p.isCloudUser ? formatFirstName(p.name) : p.name) : 'Player'; })()} • Round ${activeCell.roundId}`
+            : ''
+        }
+        displayValue={inputValue}
+        onSubmit={submitScore}
+      >
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+            <button
+              key={num}
+              onClick={() => setInputValue(p => p === '0' ? num.toString() : p === '-' ? '-' + num : p + num)}
+              className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
             >
-              +/-
+              {num}
             </button>
-            
-            <button 
-              onClick={() => setInputValue(p => p === '0' || p === '-' ? p : p + '0')} 
-              className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
-            >
-              0
-            </button>
-            <button 
-              onClick={() => setInputValue(p => p.slice(0, -1) || '0')} 
-              className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
-            >
-              ⌫
-            </button>
-          </div>
-          <button 
-            onClick={submitScore} 
-            className="w-full mt-3 bg-blue-600 text-white py-3.5 rounded-xl text-lg font-bold active:bg-blue-700 transition-all active:scale-95 shadow-md shadow-blue-500/20"
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setInputValue(p => p === '0' ? '-' : p === '-' ? '0' : p.startsWith('-') ? p.substring(1) : '-' + p)}
+            className="bg-slate-200 dark:bg-slate-700 py-3 rounded-xl text-lg font-bold active:bg-slate-300 dark:active:bg-slate-600 text-slate-700 dark:text-slate-200"
           >
-            Enter Score
+            +/-
+          </button>
+          <button
+            onClick={() => setInputValue(p => p === '0' || p === '-' ? p : p + '0')}
+            className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
+          >
+            0
+          </button>
+          <button
+            onClick={() => setInputValue(p => p.slice(0, -1) || '0')}
+            className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
+          >
+            ⌫
           </button>
         </div>
-      )}
+      </ScoreEntrySheet>
     </main>
   );
 }

@@ -3,8 +3,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useGameState } from '../hooks/useGameState';
+import { useActiveSession } from '../hooks/useActiveSession';
+import { clearStoredGameState } from '../lib/activeGameState';
+import { db } from '../lib/firebase';
+import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../lib/gameHistory';
 import AuthButton from './components/AuthButton';
 
 // --- Types ---
@@ -27,11 +30,13 @@ type MatchRecord = {
 
 export default function Home() {
   const router = useRouter();
+  const { activeSession, clearSession } = useActiveSession();
 
   // Load existing state
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
+  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [gameName, setGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
@@ -40,6 +45,7 @@ export default function Home() {
 
   const [mounted, setMounted] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [pendingGameName, setPendingGameName] = useState('Custom Game');
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -51,6 +57,9 @@ export default function Home() {
   }, []);
 
   const gameInProgress = useMemo(() => players.length > 0, [players.length]);
+
+  // True when any active game exists (session-tracked or legacy local custom)
+  const hasAnyActiveGame = !!(activeSession?.gameType) || gameInProgress;
 
   const recentGames = useMemo(() => {
     const classicGameNames = new Set(['Yahtzee', 'Triple Yahtzee', 'Farkle']);
@@ -75,32 +84,98 @@ export default function Home() {
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };
 
+  const routeToGameType = (route: string): 'custom' | 'yahtzee' | 'farkle' | null => {
+    if (route === '/custom') return 'custom';
+    if (route === '/yahtzee') return 'yahtzee';
+    if (route === '/farkle') return 'farkle';
+    return null;
+  };
+
+  const navigateToPendingRoute = () => {
+    if (!pendingRoute) {
+      return;
+    }
+
+    const targetGameType = routeToGameType(pendingRoute);
+    if (targetGameType) {
+      clearStoredGameState(targetGameType);
+    }
+
+    router.push(pendingRoute);
+    setPendingRoute(null);
+  };
+
   const handleGameSelect = (selectedName: string) => {
-    if (gameInProgress) {
+    if (hasAnyActiveGame) {
       setPendingGameName(selectedName);
+      setPendingRoute('/custom');
       setShowDialog(true);
     } else {
       setGameName(selectedName);
+      clearStoredGameState('custom');
       router.push('/custom');
     }
   };
 
+  const handleClassicGameSelect = (route: string) => {
+    if (hasAnyActiveGame) {
+      setPendingRoute(route);
+      setShowDialog(true);
+    } else {
+      const targetGameType = routeToGameType(route);
+      if (targetGameType) {
+        clearStoredGameState(targetGameType);
+      }
+      router.push(route);
+    }
+  };
+
   const deleteAndStartNew = () => {
+    // Clear session-tracked active game
+    if (activeSession?.gameType) {
+      clearStoredGameState(activeSession.gameType);
+      clearSession();
+    }
+    // Also clear legacy local custom state
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveMatchId(null);
     setHasCelebrated(false);
     setSettings({ target: 0 });
-    setGameName(pendingGameName);
+    if (pendingRoute !== '/custom') {
+      setGameName('Custom Game');
+    } else {
+      setGameName(pendingGameName);
+    }
     setShowDialog(false);
-    router.push('/custom');
+    navigateToPendingRoute();
   };
 
-  const saveAndStartNew = () => {
-    if (players.length > 0 && rounds.length > 0) {
+  const saveAndStartNew = async () => {
+    const newId = `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    // Save session-tracked active game (yahtzee or farkle or custom with session)
+    if (activeSession?.gameType) {
+      let gameRecord: GameRecord | null = null;
+      if (activeSession.gameType === 'custom') {
+        gameRecord = buildCustomGameRecord(activeSession.gameState, newId);
+      } else if (activeSession.gameType === 'yahtzee') {
+        gameRecord = buildYahtzeeGameRecord(activeSession.gameState, newId);
+      } else if (activeSession.gameType === 'farkle') {
+        gameRecord = buildFarkleGameRecord(activeSession.gameState, newId);
+      }
+      if (gameRecord) {
+        setGameHistory(prev => upsertGameRecord(prev, gameRecord!));
+        if (db) {
+          try { await saveGameRecordToCloud(db, gameRecord); } catch { /* swallow */ }
+        }
+      }
+      clearStoredGameState(activeSession.gameType);
+      clearSession();
+    } else if (gameInProgress) {
+      // Legacy local custom game
       const finalScores: Record<string, number> = {};
       players.forEach(p => { finalScores[p.id] = calculateTotal(p.id); });
-
       const newMatch: MatchRecord = {
         matchId: activeMatchId || Date.now().toString(),
         date: new Date().toLocaleDateString(),
@@ -111,14 +186,26 @@ export default function Home() {
         playerSnapshots: players.map(p => ({ id: p.id, name: p.name, emoji: p.emoji })),
         settings: { ...settings }
       };
-
       if (activeMatchId) {
         setMatchHistory(matchHistory.map(m => m.matchId === activeMatchId ? newMatch : m));
       } else {
         setMatchHistory([newMatch, ...matchHistory]);
       }
     }
-    deleteAndStartNew();
+
+    // Reset local custom state and navigate
+    setPlayers([]);
+    setRounds([{ roundId: 1, scores: {} }]);
+    setActiveMatchId(null);
+    setHasCelebrated(false);
+    setSettings({ target: 0 });
+    if (pendingRoute !== '/custom') {
+      setGameName('Custom Game');
+    } else {
+      setGameName(pendingGameName);
+    }
+    setShowDialog(false);
+    navigateToPendingRoute();
   };
 
   if (!mounted) return null;
@@ -153,10 +240,12 @@ export default function Home() {
               <div className="text-4xl text-center mb-4">⚠️</div>
               <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Active Game Found</h3>
               <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
-                Starting a new game will reset your current board. What should we do with the active game?
+                {activeSession?.gameType
+                  ? `A ${activeSession.gameType === 'custom' ? 'Custom Game' : activeSession.gameType === 'yahtzee' ? 'Yahtzee' : 'Farkle'} game is already in progress. Save it first, or discard it to start fresh.`
+                  : 'A game is already in progress. Save it first, or discard it to start fresh.'}
               </p>
               <div className="flex flex-col gap-3">
-                <button onClick={saveAndStartNew} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 dark:shadow-none active:scale-95 transition">
+                <button onClick={() => void saveAndStartNew()} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 dark:shadow-none active:scale-95 transition">
                   💾 Save & Start New
                 </button>
                 <button onClick={deleteAndStartNew} className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 py-4 rounded-2xl font-black active:bg-red-100 dark:active:bg-red-900/40 transition">
@@ -215,7 +304,7 @@ export default function Home() {
         <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2 mt-8">Classic Games</h2>
         <div className="grid gap-3">
           {/* Yahtzee Module */}
-          <Link href="/yahtzee" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
+          <button onClick={() => handleClassicGameSelect('/yahtzee')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
                 🎲
@@ -226,20 +315,20 @@ export default function Home() {
               </div>
             </div>
             <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
-          </Link>
+          </button>
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between opacity-50 grayscale cursor-not-allowed">
+          <button onClick={() => handleClassicGameSelect('/farkle')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
                 🎲
               </div>
               <div>
                 <h3 className="text-lg font-black text-slate-800 dark:text-white">Farkle</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Coming soon.</p>
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Regular & stealing modes</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold">🔒</div>
-          </div>
+            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
+          </button>
         </div>
 
       </div>

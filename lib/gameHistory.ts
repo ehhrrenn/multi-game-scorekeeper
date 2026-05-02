@@ -12,6 +12,9 @@ export type PlayerSnapshot = {
 export type Round = { roundId: number; scores: Record<string, number> };
 export type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 export type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
+export type FarkleMode = 'regular' | 'stealing';
+export type FarkleScoreMap = Record<string, Record<string, number | null>>;
+export type FarkleSettings = { targetScore: number; roundCount: number | null };
 export type GameRecord = {
   gameId: string;
   date: string;
@@ -21,6 +24,9 @@ export type GameRecord = {
   savedRounds?: Round[];
   yahtzeeScores?: YahtzeeScoreMap;
   isTripleYahtzee?: boolean;
+  farkleScores?: FarkleScoreMap;
+  farkleMode?: FarkleMode;
+  farkleSettings?: FarkleSettings;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
 };
@@ -37,6 +43,14 @@ type YahtzeeSessionState = {
   players: PlayerSnapshot[];
   scores: YahtzeeScoreMap;
   isTripleYahtzee: boolean;
+};
+
+type FarkleSessionState = {
+  players: PlayerSnapshot[];
+  scores: FarkleScoreMap;
+  mode: FarkleMode;
+  settings: FarkleSettings;
+  activeGameId?: string | null;
 };
 
 const UPPER_CATEGORY_IDS = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes'];
@@ -150,5 +164,52 @@ export function buildYahtzeeGameRecord(state: YahtzeeSessionState, gameId?: stri
       useCustomEmoji: player.useCustomEmoji
     })),
     settings: { target: 0, scoreDirection: 'UP' }
+  };
+}
+
+export function buildFarkleGameRecord(state: FarkleSessionState, gameId?: string): GameRecord | null {
+  if (!state.players.length || !Object.keys(state.scores).length) {
+    return null;
+  }
+
+  const finalScores: Record<string, number> = {};
+  const roundIndexes = new Set<number>();
+
+  for (const player of state.players) {
+    const playerRounds = state.scores[player.id] || {};
+    const total = Object.entries(playerRounds).reduce((sum, [roundIndex, value]) => {
+      roundIndexes.add(Number(roundIndex));
+      return sum + (value || 0);
+    }, 0);
+    finalScores[player.id] = total;
+  }
+
+  const sortedRoundIndexes = Array.from(roundIndexes).sort((a, b) => a - b);
+  const savedRounds: Round[] = sortedRoundIndexes.map((roundIndex) => ({
+    roundId: roundIndex + 1,
+    scores: Object.fromEntries(
+      state.players.map((player) => [player.id, state.scores[player.id]?.[String(roundIndex)] || 0])
+    )
+  }));
+
+  return {
+    gameId: gameId || state.activeGameId || `game_${Date.now()}`,
+    date: new Date().toISOString(),
+    gameName: state.mode === 'stealing' ? 'Farkle Stealing' : 'Farkle',
+    finalScores,
+    activePlayerIds: state.players.map((player) => player.id),
+    savedRounds,
+    farkleScores: JSON.parse(JSON.stringify(state.scores)),
+    farkleMode: state.mode,
+    farkleSettings: state.settings,
+    playerSnapshots: state.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      emoji: player.emoji,
+      photoURL: player.photoURL,
+      isCloudUser: player.isCloudUser,
+      useCustomEmoji: player.useCustomEmoji
+    })),
+    settings: { target: state.settings.targetScore, scoreDirection: 'UP' }
   };
 }

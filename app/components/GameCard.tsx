@@ -17,6 +17,9 @@ type PlayerSnapshot = {
 type Round = { roundId: number; scores: Record<string, number> };
 type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+type FarkleMode = 'regular' | 'stealing';
+type FarkleScoreMap = Record<string, Record<string, number | null>>;
+type FarkleSettings = { targetScore: number; roundCount: number | null };
 type StandingsPlayer = PlayerSnapshot & { score: number };
 
 export type GameRecord = {
@@ -28,6 +31,9 @@ export type GameRecord = {
   savedRounds?: Round[];
   yahtzeeScores?: YahtzeeScoreMap;
   isTripleYahtzee?: boolean;
+  farkleScores?: FarkleScoreMap;
+  farkleMode?: FarkleMode;
+  farkleSettings?: FarkleSettings;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
 };
@@ -68,6 +74,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
   const handleResume = (e: React.MouseEvent) => {
     e.stopPropagation();
     const isYahtzeeGame = game.gameName === 'Yahtzee' || game.gameName === 'Triple Yahtzee' || Boolean(game.yahtzeeScores);
+    const isFarkleGame = game.gameName === 'Farkle' || game.gameName === 'Farkle Stealing' || Boolean(game.farkleScores) || Boolean(game.farkleMode);
 
     window.localStorage.setItem('scorekeeper_active_game_id', game.gameId);
 
@@ -80,6 +87,25 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
       window.localStorage.setItem('yahtzee_scores_v2', JSON.stringify(game.yahtzeeScores || {}));
       window.localStorage.setItem('yahtzee_is_triple', JSON.stringify(Boolean(game.isTripleYahtzee || game.gameName === 'Triple Yahtzee')));
       router.push('/yahtzee');
+      return;
+    }
+
+    if (isFarkleGame) {
+      const farklePlayers = game.activePlayerIds
+        .map((id) => game.playerSnapshots.find((player) => player.id === id))
+        .filter((player): player is PlayerSnapshot => Boolean(player));
+
+      const roundIndexes = game.savedRounds?.map((round) => round.roundId - 1) || [];
+      const currentRoundIndex = roundIndexes.length > 0 ? Math.max(...roundIndexes) : 0;
+
+      window.localStorage.setItem('farkle_players', JSON.stringify(farklePlayers));
+      window.localStorage.setItem('farkle_scores', JSON.stringify(game.farkleScores || {}));
+      window.localStorage.setItem('farkle_mode', JSON.stringify(game.farkleMode || 'regular'));
+      window.localStorage.setItem('farkle_settings', JSON.stringify(game.farkleSettings || { targetScore: game.settings?.target || 10000, roundCount: null }));
+      window.localStorage.setItem('farkle_phase', JSON.stringify('PLAYING'));
+      window.localStorage.setItem('farkle_current_round', JSON.stringify(currentRoundIndex));
+      window.localStorage.setItem('farkle_current_player', JSON.stringify(0));
+      router.push('/farkle');
       return;
     }
 
