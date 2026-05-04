@@ -500,6 +500,11 @@ const allAvailablePlayers = useMemo(() => {
     animationDuration: `${Math.random() * 2 + 2}s`,
     animationDelay: `${Math.random() * 2}s`
   })), [winnerEmoji]);
+  const gridWinConditionLabel = activeProfile?.winCondition === 'LOW' ? 'Lowest total wins' : 'Highest total wins';
+  const gridTargetLabel = settings.target > 0
+    ? `${settings.scoreDirection === 'DOWN' ? 'Start From' : 'Target'} ${settings.target.toLocaleString()}`
+    : 'No target';
+  const customHeaderSubtitle = `${gridWinConditionLabel} • ${gridTargetLabel} • Round ${Math.max(rounds.length, 1)}`;
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
@@ -688,47 +693,51 @@ const allAvailablePlayers = useMemo(() => {
 
       {viewMode !== 'SETUP' && (
         <div className="max-w-screen-md mx-auto">
-          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{activeGameName}</h1>
+          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+            <div className="min-w-0 pr-4">
+              <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate">{activeGameName}</h1>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
+                {customHeaderSubtitle}
+              </p>
+            </div>
             <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
           </div>
 
-          <div className="pt-[80px] px-4">
-             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-              <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
-              <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
+          <div className="pt-16 px-4">
+             <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
+                <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
+              </div>
             </div>
 
             {viewMode === 'GRID' && (
-              <div className="animate-in fade-in pb-4">
-                
-                {/* 🚨 REMOVED `overflow-x-auto` HERE SO STICKY HEADER WORKS GLOBALLY */}
+              <div className="animate-in fade-in pb-60">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-                  {/* The overflow-x-auto allows horizontal swiping on small screens */}
-                  <div className="overflow-x-auto scrollbar-hide">
-                    {/* table-fixed ensures all columns are exactly the same width */}
+                  <div className="max-h-[calc(100dvh-21rem)] overflow-auto scrollbar-hide">
                     <table className="w-full table-fixed min-w-max">
+                      <colgroup>
+                        <col className="w-16" />
+                        {validPlayers.map((p) => (
+                          <col key={`${p.id}-col`} className="w-28" />
+                        ))}
+                      </colgroup>
                       <thead>
                         <tr>
-                          {/* Round Column - Fixed Width */}
-                          <th className="w-16 sticky left-0 z-30 bg-slate-50/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th className="w-16 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
                             Rnd
                           </th>
-                          
-                          {/* Player Columns - Min Width for swiping */}
-                          {players.filter(p => p && p.id).map((p) => (
-                            <th key={p.id} className="min-w-[100px] w-auto sticky top-0 z-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
+                          {validPlayers.map((p) => (
+                            <th key={p.id} className="w-28 sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
                               <div className="flex flex-col items-center gap-1">
                                 <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
-                                  {/* Plug in the Avatar logic here! */}
                                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                                     <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
                                   ) : (
                                     <span>{p.emoji || '👤'}</span>
                                   )}
                                 </div>
-                                {/* Truncate ensures really long names don't break the layout if First Name fails */}
-                                  <div className="text-xs font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
+                                <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
                                   {p.isCloudUser ? formatFirstName(p.name) : p.name.split(' ')[0]}
                                 </div>
                               </div>
@@ -740,19 +749,19 @@ const allAvailablePlayers = useMemo(() => {
                     <tbody>
                       {rounds.map(round => (
                         <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                          <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50">
+                          <td className="w-16 p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50 sticky left-0 z-10">
                             <div className="flex items-center justify-between px-1">
                               <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
                               <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
                             </div>
                           </td>
-                          {players.filter(p => p && p.id).map(p => {
+                          {validPlayers.map(p => {
                             const isSelected = activeCell?.roundId === round.roundId && activeCell?.playerId === p.id;
                             return (
                               <td 
                                 key={p.id} 
                                 onClick={() => handleCellTap(round.roundId, p.id)} 
-                                className={`p-4 text-xl font-medium text-center border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
+                                className={`w-28 p-4 text-xl font-medium text-center border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
                               >
                                 {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
                               </td>
@@ -761,10 +770,10 @@ const allAvailablePlayers = useMemo(() => {
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-slate-800 dark:bg-slate-900 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] border-t dark:border-slate-700">
+                    <tfoot className="bg-slate-800 dark:bg-slate-900 text-white border-t dark:border-slate-700">
                       <tr>
-                        <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 text-center">Tot</td>
-                        {players.filter(p => p && p.id).map((p) => {
+                        <td className="w-16 p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 text-center sticky left-0 z-10 bg-slate-800 dark:bg-slate-900">Tot</td>
+                        {validPlayers.map((p) => {
                           const total = calculateTotal(p.id);
                           let isWinner = false;
                           if (settings.target > 0) {
@@ -772,7 +781,7 @@ const allAvailablePlayers = useMemo(() => {
                             if (settings.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
                           }
                           return (
-                            <td key={p.id} className={`p-4 font-black text-xl text-center ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
+                            <td key={p.id} className={`w-28 p-4 font-black text-xl text-center ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
                               {total}
                             </td>
                           );
@@ -781,8 +790,10 @@ const allAvailablePlayers = useMemo(() => {
                     </tfoot></table>
                   </div>
                 </div>
-                
-                <div className="flex flex-row gap-3">
+
+                <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+                    <div className="flex flex-row gap-3">
                   {isGameOver ? (
                     <button 
                       onClick={handleStartNewGame} 
@@ -811,6 +822,8 @@ const allAvailablePlayers = useMemo(() => {
                       <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
                     </button>
                   )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

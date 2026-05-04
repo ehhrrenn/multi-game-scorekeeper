@@ -177,7 +177,7 @@ export function isValidFarkleTurnTotal(total: number, baseScore = 0): boolean {
     return false;
   }
 
-  return isValidFarkleScore(total - baseScore);
+  return (total - baseScore) % 50 === 0;
 }
 
 export function getFarkleValidationMessage(score: number): string | null {
@@ -205,8 +205,8 @@ export function getFarkleTurnValidationMessage(total: number, baseScore = 0): st
     return 'Turn total cannot be less than the accepted stolen score.';
   }
 
-  if (!isValidFarkleScore(total - baseScore)) {
-    return `${total - baseScore} is not a valid Farkle score combination.`;
+  if ((total - baseScore) % 50 !== 0) {
+    return 'Turn total must increase in 50-point increments.';
   }
 
   return null;

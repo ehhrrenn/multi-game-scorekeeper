@@ -20,6 +20,7 @@ type ActiveCell = { roundIndex: number; playerId: string } | null;
 
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 const DEFAULT_SETTINGS: FarkleSettings = { targetScore: 10000, roundCount: null };
+const DEFAULT_ROUND_COUNT = 10;
 
 function displayPlayerName(player: PlayerSnapshot): string {
   if (player.isCloudUser) {
@@ -55,6 +56,9 @@ export default function FarklePage() {
   const [showClearSetupConfirm, setShowClearSetupConfirm] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [playingView, setPlayingView] = useState<'GRID' | 'GRAPH'>('GRID');
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
+  const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('farkle_has_celebrated', false);
 
   const { activeSession, saveSession, clearSession } = useActiveSession();
   const currentSessionId = activeSession?.gameType === 'farkle' ? activeSession.sessionId : undefined;
@@ -139,11 +143,40 @@ export default function FarklePage() {
     return roundIndex;
   }, [players, scores]);
 
-  const targetReached = settings.targetScore > 0 && players.some((player) => (totalScores[player.id] || 0) >= settings.targetScore);
+  const targetReachedRoundIndex = useMemo(() => {
+    if (settings.targetScore <= 0 || players.length === 0) {
+      return null;
+    }
+
+    const runningTotals: Record<string, number> = Object.fromEntries(players.map((player) => [player.id, 0]));
+    const maxRound = Math.max(highestSavedRoundIndex, currentRoundIndex);
+
+    for (let roundIndex = 0; roundIndex <= maxRound; roundIndex += 1) {
+      for (const player of players) {
+        const score = getRoundScore(player.id, roundIndex);
+        if (score === null) {
+          continue;
+        }
+
+        runningTotals[player.id] += score;
+        if (runningTotals[player.id] >= settings.targetScore) {
+          return roundIndex;
+        }
+      }
+    }
+
+    return null;
+  }, [settings.targetScore, players, highestSavedRoundIndex, currentRoundIndex, scores]);
+
+  const targetReached = targetReachedRoundIndex !== null;
   const roundLimitReached = settings.roundCount !== null && completedRoundCount >= settings.roundCount;
   const usesRoundWinCondition = settings.roundCount !== null;
-  const isGameComplete = players.length > 0 && (usesRoundWinCondition ? roundLimitReached : targetReached);
+  const activeWinCondition: 'target' | 'rounds' = usesRoundWinCondition ? 'rounds' : 'target';
+  const finalRoundCompletedForTarget = targetReachedRoundIndex !== null && completedRoundCount >= targetReachedRoundIndex + 1;
+  const isGameComplete = players.length > 0 && (usesRoundWinCondition ? roundLimitReached : finalRoundCompletedForTarget);
   const currentPlayer = players[currentPlayerIndex] || null;
+  const highestTotal = players.length ? Math.max(...players.map((player) => totalScores[player.id] || 0)) : 0;
+  const winningPlayers = isGameComplete ? players.filter((player) => (totalScores[player.id] || 0) === highestTotal) : [];
   const visibleRoundCount = Math.max(
     1,
     currentRoundIndex + 1,
@@ -223,6 +256,9 @@ export default function FarklePage() {
     setInputValue('0');
     setAcceptedStolenScore(null);
     setEntryMode('quick');
+    setShowCelebration(false);
+    setWinnerEmoji('🏆');
+    setHasCelebrated(false);
     clearStoredGameState('farkle');
     if (activeSession?.gameType === 'farkle') {
       clearSession();
@@ -457,44 +493,107 @@ export default function FarklePage() {
     setInputValue((prev) => String((Number.parseInt(prev || '0', 10) || 0) + amount));
   };
 
+  useEffect(() => {
+    if (isGameComplete && !hasCelebrated && winningPlayers.length > 0) {
+      setWinnerEmoji(winningPlayers[0].emoji || '🏆');
+      setShowCelebration(true);
+      setHasCelebrated(true);
+      setTimeout(() => setShowCelebration(false), 4500);
+    }
+  }, [isGameComplete, hasCelebrated, winningPlayers, setHasCelebrated]);
+
+  const rainDrops = useMemo(() => Array.from({ length: 36 }).map((_, i) => ({
+    id: i,
+    emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
+    left: `${Math.random() * 100}%`,
+    animationDuration: `${Math.random() * 2 + 2}s`,
+    animationDelay: `${Math.random() * 2}s`
+  })), [winnerEmoji]);
+
+  const setWinCondition = (nextCondition: 'target' | 'rounds') => {
+    setSettings((prev) => {
+      if (nextCondition === 'rounds') {
+        return {
+          ...prev,
+          targetScore: 0,
+          roundCount: prev.roundCount && prev.roundCount > 0 ? prev.roundCount : DEFAULT_ROUND_COUNT
+        };
+      }
+
+      return {
+        ...prev,
+        targetScore: prev.targetScore > 0 ? prev.targetScore : DEFAULT_SETTINGS.targetScore,
+        roundCount: null
+      };
+    });
+  };
+
   const handleTargetChange = (value: string) => {
     const nextValue = Number.parseInt(value || '0', 10);
     setSettings((prev) => ({
       ...prev,
-      targetScore: Number.isFinite(nextValue) ? Math.max(0, nextValue) : 0
+      targetScore: Number.isFinite(nextValue) ? Math.max(1, nextValue) : DEFAULT_SETTINGS.targetScore,
+      roundCount: null
     }));
   };
 
   const handleRoundCountChange = (value: string) => {
     if (!value.trim()) {
-      setSettings((prev) => ({ ...prev, roundCount: null }));
+      setSettings((prev) => ({ ...prev, roundCount: DEFAULT_ROUND_COUNT, targetScore: 0 }));
       return;
     }
 
     const nextValue = Number.parseInt(value, 10);
     setSettings((prev) => ({
       ...prev,
-      roundCount: Number.isFinite(nextValue) && nextValue > 0 ? nextValue : null
+      targetScore: 0,
+      roundCount: Number.isFinite(nextValue) && nextValue > 0 ? nextValue : DEFAULT_ROUND_COUNT
     }));
   };
 
   if (phase === 'PLAYING') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[320px] font-sans text-slate-800 dark:text-slate-200">
-        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        {showCelebration && (
+          <div className="fixed inset-0 z-[120] pointer-events-none overflow-hidden">
+            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-500 flex items-center justify-center">
+              <h2 className="text-5xl font-black text-white drop-shadow-2xl animate-bounce z-10 text-center px-4">
+                {winningPlayers.map((player) => displayPlayerName(player)).join(', ')} Wins!
+              </h2>
+            </div>
+            {rainDrops.map((drop) => (
+              <div
+                key={drop.id}
+                className="absolute text-4xl animate-fall drop-shadow-xl"
+                style={{ left: drop.left, top: '-10%', animationDuration: drop.animationDuration, animationDelay: drop.animationDelay, animationFillMode: 'forwards' }}
+              >
+                {drop.emoji}
+              </div>
+            ))}
+            <style dangerouslySetInnerHTML={{ __html: `
+              @keyframes fall {
+                0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+                100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+              }
+              .animate-fall { animation-name: fall; animation-timing-function: linear; }
+            ` }} />
+          </div>
+        )}
+
+        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
           <div className="min-w-0 pr-4">
             <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate">{mode === 'stealing' ? 'Farkle Stealing' : 'Farkle'}</h1>
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
               {usesRoundWinCondition
                 ? `First through ${settings.roundCount} rounds • Round ${currentRoundIndex + 1}`
-                : `To ${settings.targetScore.toLocaleString()} • Round ${currentRoundIndex + 1}`}
+                : `To ${settings.targetScore.toLocaleString()} • ${targetReached ? 'Final Round' : `Round ${currentRoundIndex + 1}`}`}
             </p>
           </div>
           <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
         </div>
 
-        <main className="max-w-screen-md mx-auto px-4 pt-[84px]">
-          <div className="sticky top-16 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pb-3">
+        <main className="max-w-screen-md mx-auto px-4 pt-16">
+          <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
                 🧮 Score Grid
@@ -507,17 +606,23 @@ export default function FarklePage() {
 
           {playingView === 'GRID' ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-6">
-              <div className="overflow-x-auto scrollbar-hide">
+              <div className="max-h-[calc(100dvh-21rem)] overflow-auto scrollbar-hide">
                 <table className="w-full table-fixed min-w-max">
+                  <colgroup>
+                    <col className="w-16" />
+                    {players.map((player) => (
+                      <col key={`${player.id}-col`} className="w-28" />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr>
-                      <th className="w-16 sticky left-0 z-30 bg-slate-50/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="w-16 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
                         Rnd
                       </th>
                       {players.map((player, index) => {
                         const isCurrentPlayer = index === currentPlayerIndex && !isGameComplete;
                         return (
-                          <th key={player.id} className={`min-w-[108px] w-auto sticky top-0 z-20 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3 ${isCurrentPlayer ? 'bg-blue-50/90 dark:bg-blue-900/30' : 'bg-white/90 dark:bg-slate-900/90'}`}>
+                          <th key={player.id} className={`w-28 sticky top-0 z-20 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3 ${isCurrentPlayer ? 'bg-blue-50/95 dark:bg-blue-900/30' : 'bg-white/95 dark:bg-slate-900/95'}`}>
                             <div className="flex flex-col items-center gap-1">
                               <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
                                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
@@ -538,7 +643,7 @@ export default function FarklePage() {
                   <tbody>
                     {Array.from({ length: visibleRoundCount }).map((_, roundIndex) => (
                       <tr key={roundIndex} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <td className="p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50 text-center text-sm font-bold text-slate-500 dark:text-slate-400">
+                        <td className="w-16 p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50 text-center text-sm font-bold text-slate-500 dark:text-slate-400 sticky left-0 z-10">
                           {roundIndex + 1}
                         </td>
                         {players.map((player) => {
@@ -550,7 +655,7 @@ export default function FarklePage() {
                             <td
                               key={`${player.id}-${roundIndex}`}
                               onClick={() => editable && openScoreEntry(roundIndex, player.id)}
-                              className={`relative min-w-[108px] border-l border-slate-50 dark:border-slate-800 p-3 text-center align-middle transition ${editable ? 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-800' : 'cursor-default'} ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-inset ring-blue-500' : ''}`}
+                              className={`relative w-28 border-l border-slate-50 dark:border-slate-800 p-3 text-center align-middle transition ${editable ? 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-800' : 'cursor-default'} ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-inset ring-blue-500' : ''}`}
                             >
                               {score !== null ? (
                                 <div className="flex flex-col items-center justify-center gap-1">
@@ -566,16 +671,14 @@ export default function FarklePage() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-slate-800 dark:bg-slate-200 text-white sticky bottom-0 z-30 shadow-[0_-4px_6px_rgba(0,0,0,0.1)] border-t dark:border-slate-700">
+                  <tfoot className="bg-slate-800 dark:bg-slate-200 text-white border-t dark:border-slate-700">
                     <tr>
-                      <td className="p-4 font-bold border-r border-slate-700 dark:border-slate-300 text-xs uppercase opacity-60 text-center">Tot</td>
+                      <td className="w-16 p-4 font-bold border-r border-slate-700 dark:border-slate-300 text-xs uppercase opacity-60 text-center sticky left-0 z-10 bg-slate-800 dark:bg-slate-200">Tot</td>
                       {players.map((player) => {
                         const total = totalScores[player.id] || 0;
-                        const hasWon = usesRoundWinCondition
-                          ? roundLimitReached
-                          : settings.targetScore > 0 && total >= settings.targetScore;
+                        const hasWon = isGameComplete && total === highestTotal;
                         return (
-                          <td key={`${player.id}-total`} className={`p-4 text-center text-xl font-black ${hasWon ? 'text-emerald-300 dark:text-emerald-600' : ''}`}>
+                          <td key={`${player.id}-total`} className={`w-28 p-4 text-center text-xl font-black ${hasWon ? 'text-emerald-300 dark:text-emerald-600' : ''}`}>
                             {total}
                           </td>
                         );
@@ -643,27 +746,31 @@ export default function FarklePage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-8">
-            {!isGameComplete && currentPlayer && (
-              <button
-                onClick={() => openScoreEntry(currentRoundIndex, currentPlayer.id)}
-                className="rounded-xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/50 p-4 text-sm font-black text-blue-600 dark:text-blue-300 shadow-sm active:scale-[0.98] transition"
-              >
-                🎯 Enter {displayPlayerName(currentPlayer)} Score
-              </button>
-            )}
-            <button
-              onClick={() => void handleSaveGame()}
-              className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-            >
-              {isSaved ? '✅ Saved!' : '💾 Save Game'}
-            </button>
-            <button
-              onClick={() => void handleSaveAndClose()}
-              className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isGameComplete ? 'bg-red-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200'}`}
-            >
-              {isGameComplete ? '🏁 Save & Close' : '⏹️ End Game'}
-            </button>
+          <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {!isGameComplete && currentPlayer && (
+                  <button
+                    onClick={() => openScoreEntry(currentRoundIndex, currentPlayer.id)}
+                    className="rounded-xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/50 p-4 text-sm font-black text-blue-600 dark:text-blue-300 shadow-sm active:scale-[0.98] transition"
+                  >
+                    🎯 Enter {displayPlayerName(currentPlayer)} Score
+                  </button>
+                )}
+                <button
+                  onClick={() => void handleSaveGame()}
+                  className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                >
+                  {isSaved ? '✅ Saved!' : '💾 Save Game'}
+                </button>
+                <button
+                  onClick={() => void handleSaveAndClose()}
+                  className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isGameComplete ? 'bg-red-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200'}`}
+                >
+                  {isGameComplete ? '🏁 Save & Close' : '⏹️ End Game'}
+                </button>
+              </div>
+            </div>
           </div>
         </main>
 
@@ -740,8 +847,8 @@ export default function FarklePage() {
                   onClick={() => incrementInput(combo.points)}
                   className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-black text-amber-700 transition active:scale-95 dark:bg-amber-900/20 dark:text-amber-300"
                 >
-                  <span className="block text-[11px] uppercase tracking-wide">{combo.label}</span>
-                  <span className="block text-xs opacity-70">+{combo.points}</span>
+                  <span className="block text-xl leading-none">+{combo.points}</span>
+                  <span className="block text-[11px] uppercase tracking-wide opacity-70 mt-1">{combo.label}</span>
                 </button>
               ))}
             </div>
@@ -830,36 +937,79 @@ export default function FarklePage() {
         </div>
 
         <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Win Conditions</h2>
-        <div className="mb-8 grid gap-4 rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Target Score</label>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setSettings((prev) => ({ ...prev, targetScore: Math.max(0, prev.targetScore - 500) }))} className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black dark:bg-slate-800">-</button>
-              <input
-                type="number"
-                min={0}
-                value={settings.targetScore}
-                onChange={(event) => handleTargetChange(event.target.value)}
-                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950"
-              />
-              <button onClick={() => setSettings((prev) => ({ ...prev, targetScore: prev.targetScore + 500 }))} className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black dark:bg-slate-800">+</button>
-            </div>
+        <div className="mb-8 rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <label className="mb-3 block text-xs font-bold uppercase tracking-widest text-slate-400">Win Method</label>
+          <div className="mb-4 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <button
+              onClick={() => setWinCondition('target')}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'target' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              Target Score
+            </button>
+            <button
+              onClick={() => setWinCondition('rounds')}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'rounds' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
+            >
+              Round Count
+            </button>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Round Count</label>
+            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'target' ? 'text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>Target Score</label>
             <div className="flex items-center gap-2">
-              <button onClick={() => setSettings((prev) => ({ ...prev, roundCount: prev.roundCount && prev.roundCount > 1 ? prev.roundCount - 1 : null }))} className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black dark:bg-slate-800">-</button>
+              <button
+                onClick={() => setSettings((prev) => ({ ...prev, targetScore: Math.max(1, prev.targetScore - 500), roundCount: null }))}
+                disabled={activeWinCondition !== 'target'}
+                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+              >
+                -
+              </button>
               <input
                 type="number"
                 min={1}
-                value={settings.roundCount ?? ''}
-                onChange={(event) => handleRoundCountChange(event.target.value)}
-                placeholder="Optional"
-                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950"
+                value={settings.targetScore}
+                onChange={(event) => handleTargetChange(event.target.value)}
+                disabled={activeWinCondition !== 'target'}
+                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950"
               />
-              <button onClick={() => setSettings((prev) => ({ ...prev, roundCount: (prev.roundCount || 0) + 1 || 1 }))} className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black dark:bg-slate-800">+</button>
+              <button
+                onClick={() => setSettings((prev) => ({ ...prev, targetScore: prev.targetScore + 500, roundCount: null }))}
+                disabled={activeWinCondition !== 'target'}
+                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+              >
+                +
+              </button>
             </div>
-            <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">Set round count to decide winner by rounds, or leave it blank to decide winner by target score.</p>
+          </div>
+          <div>
+            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'rounds' ? 'text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>Round Count</label>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSettings((prev) => ({ ...prev, targetScore: 0, roundCount: Math.max(1, (prev.roundCount || DEFAULT_ROUND_COUNT) - 1) }))}
+                disabled={activeWinCondition !== 'rounds'}
+                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                min={1}
+                value={settings.roundCount ?? DEFAULT_ROUND_COUNT}
+                onChange={(event) => handleRoundCountChange(event.target.value)}
+                disabled={activeWinCondition !== 'rounds'}
+                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950"
+              />
+              <button
+                onClick={() => setSettings((prev) => ({ ...prev, targetScore: 0, roundCount: (prev.roundCount || DEFAULT_ROUND_COUNT) + 1 }))}
+                disabled={activeWinCondition !== 'rounds'}
+                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+              >
+                +
+              </button>
+            </div>
+            <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">Pick one method only. Switching methods automatically disables and clears the other win condition.</p>
+          </div>
           </div>
         </div>
 

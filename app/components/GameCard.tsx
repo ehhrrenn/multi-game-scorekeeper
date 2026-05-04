@@ -68,6 +68,13 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
             score: game.finalScores[pId] || 0, // 3. Set the score
           };
         })
+        .sort((a, b) => {
+          if (isCountDown) {
+            return a.score - b.score;
+          }
+
+          return b.score - a.score;
+        });
 
   const displayPlayerName = (player: PlayerSnapshot) => player.isCloudUser ? formatFirstName(player.name) : player.name;
 

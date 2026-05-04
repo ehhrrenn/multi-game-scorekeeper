@@ -64,6 +64,7 @@ export default function YahtzeePage() {
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('');
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
+  const totalGridColumns = 1 + players.length * columnsPerPlayer;
 
   const { activeSession, saveSession, clearSession } = useActiveSession();
 
@@ -420,149 +421,176 @@ export default function YahtzeePage() {
   if (phase === 'PLAYING') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[300px] font-sans text-slate-800 dark:text-slate-200">
-        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
           <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee'}</h1>
           <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
         </div>
 
-        <main className="max-w-screen-md mx-auto px-4 pt-[80px]">
-          <div className="sticky top-16 z-30 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3">
+        <main className="max-w-screen-md mx-auto px-4 pt-16">
+          <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
               <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
             </div>
           </div>
 
-          {playingView === 'GRID' && false /* header moved inside scroll container */}
+          {playingView === 'GRID' ? (
+            <>
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
+                <div className="max-h-[calc(100dvh-21rem)] overflow-auto scrollbar-hide">
+                  <table className="w-full table-fixed min-w-max">
+                    <colgroup>
+                      <col className="w-24" />
+                      {players.map((p) => (
+                        Array.from({ length: columnsPerPlayer }).map((_, colIdx) => (
+                          <col key={`${p.id}-col-${colIdx}`} className="w-24" />
+                        ))
+                      ))}
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th className="w-24 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          Cat
+                        </th>
+                        {players.map((p) => (
+                          <th key={p.id} colSpan={columnsPerPlayer} className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-xl shadow-sm overflow-hidden">
+                                {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
+                              </div>
+                              <div className="text-[11px] font-black uppercase tracking-wide truncate w-full px-1 text-center">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
+                              {isTripleYahtzee && (
+                                <div className="flex w-full text-[9px] font-black text-slate-400">
+                                  <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
+                                  <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X2</span>
+                                  <span className="flex-1">X3</span>
+                                </div>
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td colSpan={totalGridColumns} className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                          Upper Section
+                        </td>
+                      </tr>
+                      {UPPER_CATEGORIES.map((cat) => (
+                        <tr key={cat.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="w-24 sticky left-0 z-10 bg-white dark:bg-slate-900 p-3 font-bold text-sm text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">
+                            {cat.name}
+                          </td>
+                          {players.map((p) => (
+                            Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
+                              const val = scores[p.id]?.[cat.id]?.[colIdx];
+                              return (
+                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
+                                  <button
+                                    onClick={() => handleCellClick(p.id, cat.id, colIdx)}
+                                    className="w-full py-3 font-black text-base text-center text-slate-700 dark:text-slate-200"
+                                  >
+                                    {val !== null && val !== undefined ? val : <span className="text-slate-300 dark:text-slate-700">-</span>}
+                                  </button>
+                                </td>
+                              );
+                            })
+                          ))}
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                        <td className="w-24 sticky left-0 z-10 bg-slate-50 dark:bg-slate-900 p-3 font-black text-xs uppercase tracking-wider text-slate-500 border-r border-slate-200 dark:border-slate-800">
+                          Subtotal
+                        </td>
+                        {players.map((p) => (
+                          Array.from({ length: columnsPerPlayer }).map((_, colIdx) => (
+                            <td key={`${p.id}-sub-${colIdx}`} className="w-24 py-2 text-center font-bold text-sm text-slate-500 border-r border-slate-200 dark:border-slate-800">
+                              {calcUpperTotal(p.id, colIdx)}
+                            </td>
+                          ))
+                        ))}
+                      </tr>
+                      <tr className="bg-emerald-50 dark:bg-emerald-900/10 border-b border-emerald-100 dark:border-emerald-800">
+                        <td className="w-24 sticky left-0 z-10 bg-emerald-50 dark:bg-emerald-900/10 p-3 font-black text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-500 border-r border-emerald-100 dark:border-emerald-800">
+                          Bonus (63+)
+                        </td>
+                        {players.map((p) => (
+                          Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
+                            const bonus = calcUpperBonus(calcUpperTotal(p.id, colIdx));
+                            return (
+                              <td key={`${p.id}-bonus-${colIdx}`} className={`w-24 py-2 text-center font-black text-sm border-r border-emerald-100 dark:border-emerald-800 ${bonus > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`}>
+                                {bonus > 0 ? '+35' : '-'}
+                              </td>
+                            );
+                          })
+                        ))}
+                      </tr>
 
-          <div className="overflow-x-auto scrollbar-hide">
-          <div className="min-w-max pb-8">
-            {playingView === 'GRID' ? (
-              <>
-            {/* Sticky player header — inside overflow-x-auto so it scrolls horizontally with the grid */}
-            <div className="sticky top-[124px] z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex">
-              <div className="w-24 flex-shrink-0 border-r border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/90" />
-              {players.map((p) => (
-                <div key={p.id} className="flex flex-1 min-w-[80px] flex-col items-center p-3 text-center border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
-                  <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-lg mb-1 shadow-sm overflow-hidden">
-                    {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
-                  </div>
-                  <div className="text-[10px] font-bold uppercase truncate w-full px-1">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
-                  {isTripleYahtzee && (
-                    <div className="flex w-full mt-1 text-[9px] font-black text-slate-400">
-                      <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
-                      <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X2</span>
-                      <span className="flex-1">X3</span>
-                    </div>
-                  )}
+                      <tr>
+                        <td colSpan={totalGridColumns} className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                          Lower Section
+                        </td>
+                      </tr>
+                      {LOWER_CATEGORIES.map((cat) => (
+                        <tr key={cat.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="w-24 sticky left-0 z-10 bg-white dark:bg-slate-900 p-3 font-bold text-xs text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800 leading-tight">
+                            {cat.name}
+                          </td>
+                          {players.map((p) => (
+                            Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
+                              const val = scores[p.id]?.[cat.id]?.[colIdx];
+                              return (
+                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
+                                  <button
+                                    onClick={() => handleCellClick(p.id, cat.id, colIdx)}
+                                    className="w-full py-3 font-black text-base text-center text-slate-700 dark:text-slate-200"
+                                  >
+                                    {val !== null && val !== undefined ? val : <span className="text-slate-300 dark:text-slate-700">-</span>}
+                                  </button>
+                                </td>
+                              );
+                            })
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-800 dark:bg-slate-200 text-white border-t border-slate-700 dark:border-slate-300">
+                      <tr>
+                        <td className="w-24 sticky left-0 z-10 bg-slate-800 dark:bg-slate-200 p-4 font-black text-xs uppercase tracking-widest border-r border-slate-700 dark:border-slate-300">
+                          Grand
+                        </td>
+                        {players.map((p) => (
+                          Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
+                            const upTotal = calcUpperTotal(p.id, colIdx);
+                            const bonus = calcUpperBonus(upTotal);
+                            const lowTotal = calcLowerTotal(p.id, colIdx);
+                            const grand = upTotal + bonus + lowTotal;
+                            const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
+                            return (
+                              <td key={`${p.id}-grand-${colIdx}`} className="w-24 p-3 text-center border-r border-slate-700 dark:border-slate-300">
+                                <span className="font-black text-xl text-white dark:text-black">{grand * multiplier}</span>
+                                {isTripleYahtzee && <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500">({grand}x{multiplier})</div>}
+                              </td>
+                            );
+                          })
+                        ))}
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
-              ))}
-            </div>
-            {/* UPPER SECTION */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-6">
-              <div className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">Upper Section</div>
-              {UPPER_CATEGORIES.map(cat => (
-                <div key={cat.id} className="flex border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                  <div className="w-24 flex-shrink-0 p-3 font-bold text-sm text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">{cat.name}</div>
-                  {players.map(p => (
-                    <div key={`${p.id}-${cat.id}`} className="flex flex-1 min-w-[80px] border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
-                      {Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
-                        const isTriple = isTripleYahtzee;
-                        const val = scores[p.id]?.[cat.id]?.[colIdx];
-                        return (
-                          <button 
-                            key={colIdx} onClick={() => handleCellClick(p.id, cat.id, colIdx)}
-                            className={`flex-1 flex items-center justify-center font-black text-lg ${isTriple ? 'border-r last:border-r-0 border-slate-100 dark:border-slate-800/50 text-base' : ''} ${val !== null && val !== undefined ? 'text-blue-600 dark:text-blue-400' : 'text-slate-300 dark:text-slate-700'}`}
-                          >
-                            {val !== null && val !== undefined ? val : '-'}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {/* Upper Totals */}
-              <div className="flex bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                <div className="w-24 flex-shrink-0 p-3 font-black text-xs uppercase tracking-wider text-slate-500 border-r border-slate-200 dark:border-slate-800">Subtotal</div>
-                {players.map(p => (
-                  <div key={`${p.id}-sub`} className="flex flex-1 min-w-[80px] border-r border-slate-200 dark:border-slate-800 last:border-r-0">
-                    {Array.from({ length: columnsPerPlayer }).map((_, colIdx) => (
-                      <div key={colIdx} className={`flex-1 flex items-center justify-center font-bold text-sm text-slate-500 ${isTripleYahtzee ? 'border-r last:border-r-0 border-slate-200 dark:border-slate-800' : ''}`}>{calcUpperTotal(p.id, colIdx)}</div>
-                    ))}
-                  </div>
-                ))}
               </div>
-              <div className="flex bg-emerald-50 dark:bg-emerald-900/10">
-                <div className="w-24 flex-shrink-0 p-3 font-black text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-500 border-r border-emerald-100 dark:border-emerald-800">Bonus (63+)</div>
-                {players.map(p => (
-                  <div key={`${p.id}-bonus`} className="flex flex-1 min-w-[80px] border-r border-emerald-100 dark:border-emerald-800 last:border-r-0">
-                    {Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
-                      const bonus = calcUpperBonus(calcUpperTotal(p.id, colIdx));
-                      return <div key={colIdx} className={`flex-1 flex items-center justify-center font-black text-sm ${bonus > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'} ${isTripleYahtzee ? 'border-r last:border-r-0 border-emerald-100 dark:border-emerald-800' : ''}`}>{bonus > 0 ? '+35' : '-'}</div>
-                    })}
-                  </div>
-                ))}
+
+            <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
+              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+                <button
+                  onClick={isGameComplete ? handleSaveAndClose : handleSaveGame}
+                  className={`w-full py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                >
+                  <span>{isSaved && !isGameComplete ? '✅' : '💾'}</span> {isGameComplete ? 'Save & Close' : isSaved ? 'Saved!' : 'Save Game'}
+                </button>
               </div>
             </div>
-
-            {/* LOWER SECTION */}
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mb-6">
-              <div className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">Lower Section</div>
-              {LOWER_CATEGORIES.map(cat => (
-                <div key={cat.id} className="flex border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                  <div className="w-24 flex-shrink-0 p-3 font-bold text-xs text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800 flex items-center leading-tight">{cat.name}</div>
-                  {players.map(p => (
-                    <div key={`${p.id}-${cat.id}`} className="flex flex-1 min-w-[80px] border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
-                      {Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
-                        const isTriple = isTripleYahtzee;
-                        const val = scores[p.id]?.[cat.id]?.[colIdx];
-                        return (
-                          <button 
-                            key={colIdx} onClick={() => handleCellClick(p.id, cat.id, colIdx)}
-                            className={`flex-1 flex items-center justify-center font-black text-lg ${isTriple ? 'border-r last:border-r-0 border-slate-100 dark:border-slate-800/50 text-base' : ''} ${val !== null && val !== undefined ? 'text-blue-600 dark:text-blue-400' : 'text-slate-300 dark:text-slate-700'}`}
-                          >
-                            {val !== null && val !== undefined ? val : '-'}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            {/* GRAND TOTALS */}
-            <div className="bg-slate-800 dark:bg-slate-200 rounded-2xl shadow-sm overflow-hidden flex border border-slate-900 dark:border-white">
-              <div className="w-24 flex-shrink-0 p-4 font-black text-xs uppercase tracking-widest text-slate-100 dark:text-slate-900 border-r border-slate-700 dark:border-slate-300 flex items-center">Grand Total</div>
-              {players.map(p => (
-                <div key={`${p.id}-grand`} className="flex flex-1 min-w-[80px] border-r border-slate-700 dark:border-slate-300 last:border-r-0">
-                  {Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
-                    const upTotal = calcUpperTotal(p.id, colIdx);
-                    const bonus = calcUpperBonus(upTotal);
-                    const lowTotal = calcLowerTotal(p.id, colIdx);
-                    const grand = upTotal + bonus + lowTotal;
-                    const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
-                    return (
-                      <div key={colIdx} className={`flex-1 flex flex-col items-center justify-center p-2 ${isTripleYahtzee ? 'border-r last:border-r-0 border-slate-700 dark:border-slate-300' : ''}`}>
-                         <span className="font-black text-xl text-white dark:text-black">{grand * multiplier}</span>
-                         {isTripleYahtzee && <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">({grand}x{multiplier})</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 mb-6">
-              <button
-                onClick={isGameComplete ? handleSaveAndClose : handleSaveGame}
-                className={`w-full py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-              >
-                <span>{isSaved && !isGameComplete ? '✅' : '💾'}</span> {isGameComplete ? 'Save & Close' : isSaved ? 'Saved!' : 'Save Game'}
-              </button>
-            </div>
-
             </>
             ) : (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-4 animate-in fade-in">
@@ -654,8 +682,6 @@ export default function YahtzeePage() {
               </div>
             )}
 
-          </div>
-          </div>
         </main>
 
         {/* SCORE INPUT BOTTOM SHEET */}
