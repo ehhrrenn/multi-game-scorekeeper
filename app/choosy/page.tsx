@@ -225,7 +225,7 @@ export default function ChoosyPage() {
         
         // If deciding teams, grab the new team avatar from the winners array
         const teamData = winners.find(w => w.id === touch.id);
-        const displayData = teamData ? teamData.teamAvatar : touch.avatar;
+        const displayData = (mode === 'team' && teamData) ? teamData.teamAvatar : touch.avatar;
 
         return (
           <div
