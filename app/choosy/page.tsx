@@ -73,25 +73,32 @@ export default function ChoosyPage() {
   const requestRef = useRef<number>();
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (winners.length > 0) return;
-
-    // Use requestAnimationFrame to sync state updates with the screen refresh rate
-    if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    
-    requestRef.current = requestAnimationFrame(() => {
-      const currentTouches = Array.from(e.touches).map((t) => {
-        const existing = touchesRef.current.find(prev => prev.id === t.identifier);
-        return {
-          id: t.identifier,
-          x: t.clientX,
-          y: t.clientY,
-          avatar: existing ? existing.avatar : AVATARS[0] 
-        };
+      if (winners.length > 0) return;
+  
+      // 1. SYNCHRONOUSLY capture the exact coordinates before React can wipe the event object
+      const safeTouches = Array.from(e.touches).map(t => ({
+        id: t.identifier,
+        clientX: t.clientX,
+        clientY: t.clientY
+      }));
+  
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      
+      // 2. Use our safely saved coordinates inside the animation frame
+      requestRef.current = requestAnimationFrame(() => {
+        const currentTouches = safeTouches.map((t) => {
+          const existing = touchesRef.current.find(prev => prev.id === t.id);
+          return {
+            id: t.id,
+            x: t.clientX,
+            y: t.clientY,
+            avatar: existing ? existing.avatar : AVATARS[0] 
+          };
+        });
+  
+        updateTouches(currentTouches);
       });
-
-      updateTouches(currentTouches);
-    });
-  };
+    };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (winners.length > 0) return; // Do not clear if a winner exists
