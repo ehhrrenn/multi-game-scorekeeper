@@ -148,7 +148,11 @@ export default function ChoosyPage() {
     >
       {/* Settings Header - Hides when fingers are on the screen */}
       <div className={`absolute top-0 w-full p-6 transition-opacity duration-300 z-10 ${touches.length > 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <div className="max-w-md mx-auto bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700 shadow-xl">
+        <div 
+          className="max-w-md mx-auto bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700 shadow-xl"
+          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <h1 className="text-2xl font-black text-white text-center mb-4 flex items-center justify-center gap-2">
             <span>👆</span> Choosy
           </h1>
@@ -192,6 +196,8 @@ export default function ChoosyPage() {
       {winners.length > 0 && (
         <button
           onClick={(e) => { e.stopPropagation(); resetChoosy(); }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className="absolute top-6 right-6 z-50 w-14 h-14 bg-red-500 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-black hover:bg-red-400 active:scale-90 transition-all border border-red-400 animate-in fade-in zoom-in duration-300"
           aria-label="Clear Results"
         >
