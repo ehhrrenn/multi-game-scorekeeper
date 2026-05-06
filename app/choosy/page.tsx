@@ -70,7 +70,7 @@ export default function ChoosyPage() {
   };
 
   // We need a ref to hold the animation frame ID so we can cancel it if needed
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | null>(null);
 
   const handleTouchMove = (e: React.TouchEvent) => {
       if (winners.length > 0) return;
