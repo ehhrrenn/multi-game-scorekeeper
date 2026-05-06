@@ -291,7 +291,7 @@ export default function Home() {
                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Universal multi-player score sheet.</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:translate-x-1 transition-transform">➔</div>
+            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:translate-x-1 transition-transform">▶</div>
           </button>
 
           {/* Dynamic Recent Games from History */}
