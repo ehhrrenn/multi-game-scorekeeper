@@ -123,15 +123,21 @@ export default function ChoosyPage() {
       setWinners([activeTouches[winnerIndex]]);
     } else {
       // Teams Logic
-      const shuffled = [...activeTouches].sort(() => 0.5 - Math.random());
+      const shuffledTouches = [...activeTouches].sort(() => 0.5 - Math.random());
+      
+      // Shuffle the avatars so teams get random emojis/colors every round
+      const randomTeamAvatars = [...AVATARS]
+        .sort(() => 0.5 - Math.random())
+        .slice(0, teamCount);
+
       const teams: any[] = [];
       
-      // Divide into requested number of teams, assigning a Team Avatar
-      shuffled.forEach((touch, index) => {
+      // Divide into requested number of teams, assigning the random Team Avatar
+      shuffledTouches.forEach((touch, index) => {
         const teamIndex = index % teamCount;
         teams.push({
           ...touch,
-          teamAvatar: AVATARS[teamIndex]
+          teamAvatar: randomTeamAvatars[teamIndex]
         });
       });
       setWinners(teams);
