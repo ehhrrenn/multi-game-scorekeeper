@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 
 // Mocking your global avatar/color list
 const AVATARS = [
@@ -65,7 +65,7 @@ export default function ChoosyPage() {
       
       timerRef.current = setTimeout(() => {
         makeSelection(touchesRef.current);
-      }, 1500); // Updated to 1.5 seconds
+      }, 1500); 
     }
   };
 
@@ -79,7 +79,7 @@ export default function ChoosyPage() {
         id: t.identifier,
         x: t.clientX,
         y: t.clientY,
-        avatar: existing ? existing.avatar : AVATARS[0] // Fallback
+        avatar: existing ? existing.avatar : AVATARS[0] 
       };
     });
 
@@ -138,16 +138,6 @@ export default function ChoosyPage() {
     }
   };
 
-  // Determine the title text for the winner announcement
-  const getWinnerText = () => {
-    if (winners.length === 0) return null;
-    if (mode === 'individual') {
-      return `${winners[0].avatar.name} Wins!`;
-    } else {
-      return `Teams Selected!`;
-    }
-  };
-
   return (
     <div 
       className="relative w-full h-screen bg-slate-900 overflow-hidden touch-none select-none"
@@ -198,24 +188,15 @@ export default function ChoosyPage() {
         </div>
       </div>
 
-      {/* Winner Announcement & Clear Button */}
+      {/* Top Right Clear Button */}
       {winners.length > 0 && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
-          <div className="bg-slate-900/90 backdrop-blur-sm p-8 rounded-3xl border border-slate-700 shadow-2xl animate-in zoom-in duration-300 pointer-events-auto text-center">
-            <div className="text-6xl mb-4 animate-bounce">
-              {mode === 'individual' ? winners[0].avatar.emoji : '🎉'}
-            </div>
-            <h2 className="text-4xl font-black text-white mb-8 tracking-tight">
-              {getWinnerText()}
-            </h2>
-            <button 
-              onClick={(e) => { e.stopPropagation(); resetChoosy(); }}
-              className="px-8 py-4 bg-white text-slate-900 font-black text-xl rounded-full shadow-lg hover:bg-slate-200 active:scale-95 transition-all w-full"
-            >
-              Clear Results
-            </button>
-          </div>
-        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); resetChoosy(); }}
+          className="absolute top-6 right-6 z-50 w-14 h-14 bg-red-500 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-black hover:bg-red-400 active:scale-90 transition-all border border-red-400 animate-in fade-in zoom-in duration-300"
+          aria-label="Clear Results"
+        >
+          ✕
+        </button>
       )}
 
       {/* Render Finger Touch Points */}
