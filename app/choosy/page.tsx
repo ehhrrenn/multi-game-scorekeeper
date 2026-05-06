@@ -69,21 +69,28 @@ export default function ChoosyPage() {
     }
   };
 
+  // We need a ref to hold the animation frame ID so we can cancel it if needed
+  const requestRef = useRef<number>();
+
   const handleTouchMove = (e: React.TouchEvent) => {
     if (winners.length > 0) return;
 
-    // Only update X and Y coordinates. Do NOT touch the timer.
-    const currentTouches = Array.from(e.touches).map((t) => {
-      const existing = touchesRef.current.find(prev => prev.id === t.identifier);
-      return {
-        id: t.identifier,
-        x: t.clientX,
-        y: t.clientY,
-        avatar: existing ? existing.avatar : AVATARS[0] 
-      };
-    });
+    // Use requestAnimationFrame to sync state updates with the screen refresh rate
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    
+    requestRef.current = requestAnimationFrame(() => {
+      const currentTouches = Array.from(e.touches).map((t) => {
+        const existing = touchesRef.current.find(prev => prev.id === t.identifier);
+        return {
+          id: t.identifier,
+          x: t.clientX,
+          y: t.clientY,
+          avatar: existing ? existing.avatar : AVATARS[0] 
+        };
+      });
 
-    updateTouches(currentTouches);
+      updateTouches(currentTouches);
+    });
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -223,7 +230,7 @@ export default function ChoosyPage() {
         return (
           <div
             key={touch.id}
-            className={`absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out flex items-center justify-center text-4xl shadow-2xl
+            className={`absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 transition duration-300 ease-out flex items-center justify-center text-4xl shadow-2xl
               ${isDeciding ? 'animate-pulse scale-125' : 'scale-100'}
               ${isLoser ? 'opacity-20 scale-50 grayscale' : ''}
               ${isWinner && mode === 'individual' ? 'scale-[2.0] ring-8 ring-white z-40' : ''}
