@@ -10,10 +10,11 @@ export type PlayerSnapshot = {
 };
 
 export type Round = { roundId: number; scores: Record<string, number> };
-export type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+export type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 export type GameStatus = 'IN_PROGRESS' | 'COMPLETED';
 export type CompletionReason = 'TARGET_REACHED' | 'ROUND_LIMIT_REACHED' | 'MANUAL_FINISH' | 'BUILT_IN_COMPLETE';
 export type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
+export type YahtzeeScoreEntry = { playerId: string; categoryId: string; colIndex: number; score: number };
 export type FarkleMode = 'regular' | 'stealing';
 export type FarkleScoreMap = Record<string, Record<string, number | null>>;
 export type FarkleSettings = { targetScore: number; roundCount: number | null };
@@ -25,12 +26,14 @@ export type GameRecord = {
   activePlayerIds: string[];
   savedRounds?: Round[];
   yahtzeeScores?: YahtzeeScoreMap;
+  yahtzeeScoreEntries?: YahtzeeScoreEntry[];
   isTripleYahtzee?: boolean;
   farkleScores?: FarkleScoreMap;
   farkleMode?: FarkleMode;
   farkleSettings?: FarkleSettings;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
+  winCondition?: 'HIGH' | 'LOW';
   status?: GameStatus;
   completedAt?: string;
   completedReason?: CompletionReason;
@@ -51,12 +54,14 @@ type CustomSessionState = {
   activeGameName: string;
   settings?: GameSettings;
   activeGameId?: string | null;
+  winCondition?: 'HIGH' | 'LOW';
 };
 
 type YahtzeeSessionState = {
   players: PlayerSnapshot[];
   scores: YahtzeeScoreMap;
   isTripleYahtzee: boolean;
+  scoreEntries?: YahtzeeScoreEntry[];
 };
 
 type FarkleSessionState = {
@@ -185,6 +190,17 @@ export function isGameCompleted(record: GameRecordLike): boolean {
     return reachedRoundIndex !== null && completedRounds >= reachedRoundIndex + 1;
   }
 
+  // Check for round limit first (custom games with roundLimit mode)
+  const roundLimit = record.settings?.roundLimit;
+  const rounds = record.savedRounds || [];
+  const playerIds = record.activePlayerIds || [];
+  if (roundLimit !== null && roundLimit !== undefined && roundLimit > 0) {
+    const completedRounds = countCompletedRounds(rounds, playerIds);
+    if (completedRounds >= roundLimit) {
+      return true;
+    }
+  }
+
   const target = record.settings?.target || 0;
   if (target <= 0) {
     return false;
@@ -204,10 +220,20 @@ export function isGameCompleted(record: GameRecordLike): boolean {
 }
 
 export function getWinnerIdsForRecord(record: GameRecordLike, scoreDirectionOverride?: 'UP' | 'DOWN'): string[] {
-  const scoreDirection = scoreDirectionOverride || record.settings?.scoreDirection || 'UP';
   const candidateIds = record.activePlayerIds || Object.keys(record.finalScores || {});
 
-  let bestScore = scoreDirection === 'DOWN' ? Infinity : -Infinity;
+  // Use stored winCondition if available (immutable per game)
+  // Otherwise fall back to scoreDirection or default to 'HIGH' (highest wins)
+  let isLowestWins = false;
+  if (record.winCondition) {
+    isLowestWins = record.winCondition === 'LOW';
+  } else if (scoreDirectionOverride) {
+    isLowestWins = scoreDirectionOverride === 'DOWN';
+  } else {
+    isLowestWins = (record.settings?.scoreDirection || 'UP') === 'DOWN';
+  }
+
+  let bestScore = isLowestWins ? Infinity : -Infinity;
   const winnerIds: string[] = [];
 
   for (const playerId of candidateIds) {
@@ -216,7 +242,7 @@ export function getWinnerIdsForRecord(record: GameRecordLike, scoreDirectionOver
       continue;
     }
 
-    if (scoreDirection === 'DOWN') {
+    if (isLowestWins) {
       if (score < bestScore) {
         bestScore = score;
         winnerIds.length = 0;
@@ -320,7 +346,8 @@ export function buildCustomGameRecord(state: CustomSessionState, gameId?: string
       isCloudUser: player.isCloudUser,
       useCustomEmoji: player.useCustomEmoji
     })),
-    settings
+    settings,
+    winCondition: state.winCondition
   };
 
   const target = settings.target || 0;
@@ -339,6 +366,120 @@ function calcYahtzeeColumnTotal(scoreMap: YahtzeeScoreMap, playerId: string, col
   const bonus = upperTotal >= 63 ? 35 : 0;
   const lowerTotal = LOWER_CATEGORY_IDS.reduce((sum, categoryId) => sum + (scoreMap[playerId]?.[categoryId]?.[columnIndex] || 0), 0);
   return upperTotal + bonus + lowerTotal;
+}
+
+function calcYahtzeeGrandTotal(scoreMap: YahtzeeScoreMap, playerId: string, isTripleYahtzee: boolean): number {
+  const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
+  let total = 0;
+
+  for (let columnIndex = 0; columnIndex < columnsPerPlayer; columnIndex += 1) {
+    const columnTotal = calcYahtzeeColumnTotal(scoreMap, playerId, columnIndex);
+    total += columnTotal * (isTripleYahtzee ? columnIndex + 1 : 1);
+  }
+
+  return total;
+}
+
+type YahtzeeGraphSeriesPoint = {
+  id: string;
+  emoji: string;
+  name: string;
+  isCloudUser?: boolean;
+  points: number[];
+  finalScore: number;
+};
+
+type BuildYahtzeeGraphSeriesArgs = {
+  players: PlayerSnapshot[];
+  scores: YahtzeeScoreMap;
+  isTripleYahtzee: boolean;
+  scoreEntries?: YahtzeeScoreEntry[];
+};
+
+export function buildYahtzeeGraphSeries({ players, scores, isTripleYahtzee, scoreEntries }: BuildYahtzeeGraphSeriesArgs): YahtzeeGraphSeriesPoint[] {
+  const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
+  const validCategoryIds = new Set([...UPPER_CATEGORY_IDS, ...LOWER_CATEGORY_IDS]);
+  const validPlayerIds = new Set(players.map((player) => player.id));
+  const orderedEntries = scoreEntries?.filter((entry) => (
+    typeof entry.playerId === 'string' &&
+    entry.playerId.length > 0 &&
+    validPlayerIds.has(entry.playerId) &&
+    typeof entry.categoryId === 'string' &&
+    validCategoryIds.has(entry.categoryId) &&
+    Number.isInteger(entry.colIndex) &&
+    entry.colIndex >= 0 &&
+    entry.colIndex < columnsPerPlayer &&
+    Number.isFinite(entry.score)
+  )) || [];
+
+  if (!orderedEntries.length) {
+    const categoryOrder = [...UPPER_CATEGORY_IDS, ...LOWER_CATEGORY_IDS];
+
+    return players.map((player) => {
+      let runningTotal = 0;
+      const points = [0];
+
+      for (let colIdx = 0; colIdx < columnsPerPlayer; colIdx += 1) {
+        const multiplier = isTripleYahtzee ? colIdx + 1 : 1;
+        let upperTotal = 0;
+
+        for (const categoryId of categoryOrder) {
+          const value = scores[player.id]?.[categoryId]?.[colIdx] || 0;
+          points.push(points[points.length - 1] + value * multiplier);
+          runningTotal += value * multiplier;
+
+          if (UPPER_CATEGORY_IDS.includes(categoryId)) {
+            upperTotal += value;
+          }
+        }
+
+        const bonus = (upperTotal >= 63 ? 35 : 0) * multiplier;
+        if (bonus > 0) {
+          points.push(points[points.length - 1] + bonus);
+          runningTotal += bonus;
+        }
+      }
+
+      return {
+        id: player.id,
+        emoji: player.emoji,
+        name: player.name,
+        isCloudUser: player.isCloudUser,
+        points,
+        finalScore: runningTotal,
+      };
+    });
+  }
+
+  const workingScores: YahtzeeScoreMap = {};
+  const pointsByPlayer: Record<string, number[]> = {};
+  const totalsByPlayer: Record<string, number> = {};
+
+  for (const player of players) {
+    pointsByPlayer[player.id] = [0];
+    totalsByPlayer[player.id] = 0;
+  }
+
+  for (const entry of orderedEntries) {
+    const playerScores = workingScores[entry.playerId] || (workingScores[entry.playerId] = {});
+    const categoryScores = playerScores[entry.categoryId] || (playerScores[entry.categoryId] = Array(columnsPerPlayer).fill(null));
+    categoryScores[entry.colIndex] = entry.score;
+
+    totalsByPlayer[entry.playerId] = calcYahtzeeGrandTotal(workingScores, entry.playerId, isTripleYahtzee);
+
+    for (const player of players) {
+      pointsByPlayer[player.id].push(totalsByPlayer[player.id]);
+    }
+  }
+
+  return players.map((player) => ({
+    id: player.id,
+    emoji: player.emoji,
+    name: player.name,
+    isCloudUser: player.isCloudUser,
+    points: pointsByPlayer[player.id],
+    finalScore: totalsByPlayer[player.id],
+  }));
 }
 
 export function buildYahtzeeGameRecord(state: YahtzeeSessionState, gameId?: string, options?: BuildGameRecordOptions): GameRecord | null {
@@ -365,6 +506,7 @@ export function buildYahtzeeGameRecord(state: YahtzeeSessionState, gameId?: stri
     finalScores,
     activePlayerIds: state.players.map((player) => player.id),
     yahtzeeScores: JSON.parse(JSON.stringify(state.scores)),
+    yahtzeeScoreEntries: JSON.parse(JSON.stringify(state.scoreEntries || [])),
     isTripleYahtzee: state.isTripleYahtzee,
     playerSnapshots: state.players.map((player) => ({
       id: player.id,

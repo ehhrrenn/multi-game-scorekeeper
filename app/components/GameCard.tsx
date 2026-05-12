@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { formatFirstName } from '../../lib/cloudPlayers';
+import { buildYahtzeeGraphSeries, type YahtzeeScoreEntry } from '../../lib/gameHistory';
 
 // --- Types ---
 type PlayerSnapshot = {
@@ -17,7 +18,7 @@ type PlayerSnapshot = {
 };
 type Round = { roundId: number; scores: Record<string, number> };
 type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
-type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 type FarkleMode = 'regular' | 'stealing';
 type FarkleScoreMap = Record<string, Record<string, number | null>>;
 type FarkleSettings = { targetScore: number; roundCount: number | null };
@@ -30,12 +31,14 @@ export type GameRecord = {
   activePlayerIds: string[];
   savedRounds?: Round[];
   yahtzeeScores?: YahtzeeScoreMap;
+  yahtzeeScoreEntries?: YahtzeeScoreEntry[];
   isTripleYahtzee?: boolean;
   farkleScores?: FarkleScoreMap;
   farkleMode?: FarkleMode;
   farkleSettings?: FarkleSettings;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
+  winCondition?: 'HIGH' | 'LOW';
 };
 
 type GameCardProps = {
@@ -54,7 +57,8 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<'STANDINGS' | 'GRID' | 'GRAPH'>('STANDINGS');
 
-  const isCountDown = game.settings?.scoreDirection === 'DOWN';
+  // Determine sort order: use stored winCondition if available, else fall back to scoreDirection
+  const isLowestWins = game.winCondition ? game.winCondition === 'LOW' : game.settings?.scoreDirection === 'DOWN';
   const standings = [...game.activePlayerIds]
         .map(pId => {
           // Find the player's snapshot, or provide a fallback with ALL expected fields
@@ -73,7 +77,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           };
         })
         .sort((a, b) => {
-          if (isCountDown) {
+          if (isLowestWins) {
             return a.score - b.score;
           }
 
@@ -81,6 +85,15 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
         });
 
   const displayPlayerName = (player: PlayerSnapshot) => player.isCloudUser ? formatFirstName(player.name) : player.name;
+  const yahtzeeFilledCellCount = game.yahtzeeScores
+    ? Object.values(game.yahtzeeScores).reduce((playerCount, playerScores) => (
+        playerCount + Object.values(playerScores).reduce((cellCount, values) => (
+          cellCount + values.filter((value) => value !== null && value !== undefined).length
+        ), 0)
+      ), 0)
+    : 0;
+  const canShowRoundGraph = Boolean(game.savedRounds && game.savedRounds.length > 1);
+  const canShowYahtzeeGraph = Boolean(game.yahtzeeScores) && Math.max(game.yahtzeeScoreEntries?.length || 0, yahtzeeFilledCellCount) > 1;
 
   const handleResume = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -96,6 +109,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
 
       window.localStorage.setItem('yahtzee_players', JSON.stringify(yahtzeePlayers));
       window.localStorage.setItem('yahtzee_scores_v2', JSON.stringify(game.yahtzeeScores || {}));
+  window.localStorage.setItem('yahtzee_score_entries_v1', JSON.stringify(game.yahtzeeScoreEntries || []));
       window.localStorage.setItem('yahtzee_is_triple', JSON.stringify(Boolean(game.isTripleYahtzee || game.gameName === 'Triple Yahtzee')));
       router.push('/yahtzee');
       return;
@@ -120,14 +134,8 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
       return;
     }
 
-    window.localStorage.setItem('scorekeeper_gameName', JSON.stringify(game.gameName));
-    window.localStorage.setItem('scorekeeper_settings', JSON.stringify(game.settings || { target: 0, scoreDirection: 'UP' }));
-    
-    const activePlayers = game.activePlayerIds.map(id => game.playerSnapshots.find(p => p.id === id)).filter(Boolean);
-    window.localStorage.setItem('scorekeeper_players', JSON.stringify(activePlayers));
-    window.localStorage.setItem('scorekeeper_rounds', JSON.stringify(game.savedRounds || [{ roundId: 1, scores: {} }]));
-    
-    router.push('/custom');
+    // For custom games, use query parameter for loading
+    router.push(`/custom?gameId=${game.gameId}`);
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -258,7 +266,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
             <button onClick={() => setActiveTab('STANDINGS')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'STANDINGS' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}>🏆 Standings</button>
             <button onClick={() => setActiveTab('GRID')} disabled={!game.savedRounds || game.savedRounds.length === 0} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 disabled:opacity-30 hover:text-slate-700 dark:hover:text-slate-300'}`}>🧮 Grid</button>
-            <button onClick={() => setActiveTab('GRAPH')} disabled={!game.savedRounds || game.savedRounds.length <= 1} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 disabled:opacity-30 hover:text-slate-700 dark:hover:text-slate-300'}`}>📈 Graph</button>
+            <button onClick={() => setActiveTab('GRAPH')} disabled={!canShowRoundGraph && !canShowYahtzeeGraph} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 disabled:opacity-30 hover:text-slate-700 dark:hover:text-slate-300'}`}>📈 Graph</button>
           </div>
 
           {activeTab === 'STANDINGS' && (
@@ -281,9 +289,10 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           )}
 
           {activeTab === 'GRID' && game.savedRounds && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 animate-in fade-in">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 animate-in fade-in overflow-hidden">
+                <div className="overflow-x-auto">
               <table className="w-full text-center text-sm border-collapse">
-                <thead className="bg-slate-100 dark:bg-slate-800">
+                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10">
                   <tr>
                     <th className="p-2 w-12 text-slate-500 border-b border-slate-200 dark:border-slate-700 font-normal">Rnd</th>
                     {standings.map(p => (
@@ -321,13 +330,57 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                   </tr>
                 </tfoot>
               </table>
+                </div>
             </div>
           )}
 
-          {activeTab === 'GRAPH' && game.savedRounds && (
+          {activeTab === 'GRAPH' && (canShowRoundGraph || canShowYahtzeeGraph) && (
             <div className="bg-slate-50 dark:bg-slate-950/50 p-4 rounded-xl overflow-hidden animate-in fade-in">
               <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
                 {(() => {
+                  const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'];
+
+                  if (game.yahtzeeScores) {
+                    const pointsData = buildYahtzeeGraphSeries({
+                      players: standings,
+                      scores: game.yahtzeeScores,
+                      isTripleYahtzee: Boolean(game.isTripleYahtzee || game.gameName === 'Triple Yahtzee'),
+                      scoreEntries: game.yahtzeeScoreEntries,
+                    });
+
+                    const allScores = pointsData.flatMap((d) => d.points);
+                    const max = Math.max(...allScores, 10);
+                    const min = Math.min(...allScores, 0);
+                    const range = max - min || 1;
+                    const longestPath = Math.max(...pointsData.map((d) => d.points.length), 1);
+                    const xStep = 400 / Math.max(longestPath - 1, 1);
+
+                    const labelData = pointsData.map((d) => {
+                      const finalY = 200 - ((d.finalScore - min) / range) * 200;
+                      return { ...d, targetY: finalY };
+                    }).sort((a, b) => a.targetY - b.targetY);
+
+                    for (let i = 1; i < labelData.length; i += 1) {
+                      if (labelData[i].targetY - labelData[i - 1].targetY < 20) {
+                        labelData[i].targetY = labelData[i - 1].targetY + 20;
+                      }
+                    }
+
+                    return (
+                      <>
+                        {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" className="dark:stroke-slate-700" />}
+                        {pointsData.map((d, i) => (
+                          <polyline key={`line-${i}`} points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')} fill="none" stroke={colors[i % colors.length]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        ))}
+                        {labelData.map((d, i) => (
+                          <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
+                            {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0,6)}
+                          </text>
+                        ))}
+                      </>
+                    );
+                  }
+
                   const pointsData = standings.map(p => {
                     let runningTotal = game.settings?.scoreDirection === 'DOWN' ? (game.settings.target || 0) : 0;
                     const points = [runningTotal];
@@ -355,8 +408,6 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                       labelData[i].targetY = labelData[i - 1].targetY + 20;
                     }
                   }
-
-                  const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'];
 
                   return (
                     <>

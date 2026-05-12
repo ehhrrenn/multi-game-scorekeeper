@@ -1,9 +1,9 @@
 // app/custom/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
 import type { ActiveSession } from '../../hooks/useActiveSession';
 import { clearStoredGameState } from '../../lib/activeGameState';
@@ -19,7 +19,7 @@ type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; 
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
-type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 
 // --- Helpers ---
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
@@ -39,6 +39,18 @@ const pseudoRandom = (seed: number) => {
 };
 
 export default function CustomTracker() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-500 dark:text-slate-400">Loading...</div>
+      </main>
+    }>
+      <CustomTrackerContent />
+    </Suspense>
+  );
+}
+
+function CustomTrackerContent() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
@@ -78,9 +90,12 @@ export default function CustomTracker() {
   
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
+  const [gridEditVersion, setGridEditVersion] = useState(0);
   const [showSessionConflict, setShowSessionConflict] = useState(false);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const gameIdFromUrl = searchParams?.get('gameId');
   const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
   const { activeSession, saveSession, clearSession } = useActiveSession();
   const currentSessionId = activeSession?.gameType === 'custom' ? activeSession.sessionId : undefined;
@@ -124,13 +139,57 @@ const allAvailablePlayers = useMemo(() => {
   useEffect(() => {
     if (viewMode === 'SETUP' && !isGameStarted) {
       const lastPlayedOfThisType = gameHistory.find(g => g.gameName === activeGameName);
-      if (lastPlayedOfThisType?.settings) {
-        setSettings(lastPlayedOfThisType.settings);
-      } else {
-        setSettings({ target: 0, scoreDirection: 'UP' });
+      const nextSettings = lastPlayedOfThisType?.settings || { target: 0, scoreDirection: 'UP' };
+      if (
+        settings.target !== nextSettings.target ||
+        settings.scoreDirection !== nextSettings.scoreDirection ||
+        settings.endMode !== nextSettings.endMode ||
+        settings.roundLimit !== nextSettings.roundLimit
+      ) {
+        setSettings(nextSettings);
       }
     }
-  }, [activeGameName, gameHistory, isGameStarted, setSettings, viewMode]);
+  }, [activeGameName, gameHistory, isGameStarted, settings, viewMode, setSettings]);
+
+  // Load game from URL parameter for editing
+  useEffect(() => {
+    const id = gameIdFromUrl;
+    if (!id) {
+      return;
+    }
+
+    const gameToLoad = gameHistory.find(g => g.gameId === id);
+    if (!gameToLoad) {
+      return;
+    }
+
+    // Load game state from the saved record
+    const loadedPlayers = gameToLoad.playerSnapshots || [];
+    const loadedRounds = gameToLoad.savedRounds || [{ roundId: 1, scores: {} }];
+    
+    // Map player snapshots back to full player objects for editing
+    const mappedPlayers = loadedPlayers.map((snap: any) => ({
+      id: snap.id,
+      name: snap.name,
+      emoji: snap.emoji,
+      photoURL: snap.photoURL,
+      isCloudUser: snap.isCloudUser,
+      useCustomEmoji: snap.useCustomEmoji
+    }));
+
+    setPlayers(mappedPlayers);
+    setRounds(loadedRounds);
+    setActiveGameId(id);
+    setActiveGameName(gameToLoad.gameName);
+    
+    // Load settings
+    if (gameToLoad.settings) {
+      setSettings(gameToLoad.settings);
+    }
+
+    // Switch to grid view for editing
+    setViewMode('GRID');
+  }, [gameIdFromUrl || '']);
 
   useEffect(() => {
     if (!players.length) {
@@ -360,7 +419,8 @@ const allAvailablePlayers = useMemo(() => {
       rounds,
       activeGameName,
       settings,
-      activeGameId: gameIdToUse
+      activeGameId: gameIdToUse,
+      winCondition: activeProfile.winCondition
     }, gameIdToUse);
 
     if (!newGame) {
@@ -373,14 +433,55 @@ const allAvailablePlayers = useMemo(() => {
     setTimeout(() => setIsSaved(false), 2000);
   };
 
+  const handleShare = () => {
+    const sortedPlayers = [...validPlayers].sort((a, b) => {
+      const aTotal = calculateTotal(a.id);
+      const bTotal = calculateTotal(b.id);
+      return activeProfile?.winCondition === 'LOW' ? aTotal - bTotal : bTotal - aTotal;
+    });
+    const scoreLines = sortedPlayers.map((p, i) => `${i + 1}. ${p.emoji} ${p.isCloudUser ? formatFirstName(p.name) : p.name}: ${calculateTotal(p.id)}`);
+    const shareText = `🏆 ${activeGameName}\n${scoreLines.join('\n')}`;
+    if (navigator.share) {
+      navigator.share({ title: `${activeGameName} Results`, text: shareText }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareText).catch(() => {});
+    }
+  };
+
+  // Auto-save on every round change so incomplete games appear in history
+  useEffect(() => {
+    if (viewMode !== 'GRID' || gridEditVersion === 0) return;
+    const timer = setTimeout(() => {
+      const gameIdToUse = activeGameId || `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      const winCondition = (gameProfiles.find((p) => p.name === activeGameName) || gameProfiles[0])?.winCondition;
+      const gameRecord = buildCustomGameRecord({
+        players, rounds, activeGameName, settings,
+        activeGameId: gameIdToUse, winCondition
+      }, gameIdToUse);
+      if (gameRecord) {
+        if (!activeGameId) setActiveGameId(gameIdToUse);
+        setGameHistory(prev => upsertGameRecord(prev, gameRecord));
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [activeGameId, activeGameName, gameProfiles, gridEditVersion, players, rounds, setActiveGameId, setGameHistory, settings, viewMode]);
+
   const handleStartNewGame = async () => {
+    // Detect if we're editing an existing game (activeGameId exists in gameHistory)
+    const isEditingExistingGame = activeGameId && gameHistory.some(g => g.gameId === activeGameId);
+    const gameIdForRecord = isEditingExistingGame ? activeGameId : `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
     const completedGame = buildCustomGameRecord({
       players,
       rounds,
       activeGameName,
       settings,
-      activeGameId
-    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+      activeGameId: gameIdForRecord,
+      winCondition: activeProfile.winCondition
+    }, gameIdForRecord, {
+      markCompleted: true,
+      completedReason: isGameOver ? 'TARGET_REACHED' : 'MANUAL_FINISH'
+    });
 
     if (completedGame) {
       setGameHistory(prev => upsertGameRecord(prev, completedGame));
@@ -438,13 +539,18 @@ const allAvailablePlayers = useMemo(() => {
       return;
     }
 
+    // Detect if we're editing an existing game
+    const isEditingExistingGame = activeGameId && gameHistory.some(g => g.gameId === activeGameId);
+    const gameIdForRecord = isEditingExistingGame ? activeGameId : `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
     const gameRecord = buildCustomGameRecord({
       players,
       rounds,
       activeGameName,
       settings,
-      activeGameId
-    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, {
+      activeGameId: gameIdForRecord,
+      winCondition: activeProfile.winCondition
+    }, gameIdForRecord, {
       markCompleted: true,
       completedReason: isGameOver ? 'TARGET_REACHED' : 'MANUAL_FINISH'
     });
@@ -510,6 +616,7 @@ const allAvailablePlayers = useMemo(() => {
     if (!activeCell) return;
     const val = parseInt(inputValue, 10) || 0;
     setRounds(rounds.map(r => r.roundId === activeCell.roundId ? { ...r, scores: { ...r.scores, [activeCell.playerId]: val } } : r));
+    setGridEditVersion((prev) => prev + 1);
     setActiveCell(null);
   };
 
@@ -527,10 +634,16 @@ const allAvailablePlayers = useMemo(() => {
     });
   }, [winnerEmoji]);
   const gridWinConditionLabel = activeProfile?.winCondition === 'LOW' ? 'Lowest total wins' : 'Highest total wins';
-  const gridTargetLabel = settings.target > 0
+  
+  const gridEndLabel = settings.endMode === 'ROUNDS' && settings.roundLimit
+    ? `Play to ${settings.roundLimit} round${settings.roundLimit === 1 ? '' : 's'}`
+    : settings.target > 0
     ? `${settings.scoreDirection === 'DOWN' ? 'Start From' : 'Target'} ${settings.target.toLocaleString()}`
     : 'No target';
-  const customHeaderSubtitle = `${gridWinConditionLabel} • ${gridTargetLabel} • Round ${Math.max(rounds.length, 1)}`;
+  
+  const customHeaderSubtitle = settings.endMode === 'ROUNDS' && settings.roundLimit
+    ? `${gridWinConditionLabel} • ${gridEndLabel} • Round ${Math.max(rounds.length, 1)} of ${settings.roundLimit}`
+    : `${gridWinConditionLabel} • ${gridEndLabel} • Round ${Math.max(rounds.length, 1)}`;
 
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
@@ -633,20 +746,38 @@ const allAvailablePlayers = useMemo(() => {
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rules: Target & Direction</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rules: End Condition</label>
                 
                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                  <button onClick={() => setSettings({ ...settings, scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
-                  <button onClick={() => setSettings({ ...settings, scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
+                  <button onClick={() => setSettings({ ...settings, endMode: 'TARGET', scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${(settings.endMode || 'TARGET') === 'TARGET' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🎯 Target Score</button>
+                  <button onClick={() => setSettings({ ...settings, endMode: 'ROUNDS' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.endMode === 'ROUNDS' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🔄 Num of Rounds</button>
                 </div>
 
-                <input 
-                  type="number" 
-                  value={settings.target || ''} 
-                  onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
-                  placeholder={settings.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
-                />
+                {(settings.endMode || 'TARGET') === 'TARGET' && (
+                  <div className="space-y-2">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-3">
+                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
+                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
+                    </div>
+                    <input 
+                      type="number" 
+                      value={settings.target || ''} 
+                      onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
+                      placeholder={settings.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                    />
+                  </div>
+                )}
+
+                {settings.endMode === 'ROUNDS' && (
+                  <input 
+                    type="number" 
+                    value={settings.roundLimit || ''} 
+                    onChange={e => setSettings({ ...settings, roundLimit: parseInt(e.target.value) || 0 })} 
+                    placeholder="Number of Rounds"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                  />
+                )}
               </div>
             </div>
             
@@ -819,35 +950,33 @@ const allAvailablePlayers = useMemo(() => {
 
                 <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
                   <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
-                    <div className="flex flex-row gap-3">
-                  {isGameOver ? (
-                    <button 
-                      onClick={handleStartNewGame} 
-                      className="flex-1 bg-blue-600 text-white p-4 rounded-xl font-black active:bg-blue-700 transition-colors shadow-lg shadow-blue-100 dark:shadow-none"
-                    >
-                      🔄 Start New Game
-                    </button>
-                  ) : (
-                    <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">
-                      + Round
-                    </button>
-                  )}
-                  
-                  {isGameOver ? (
-                    <button 
-                      onClick={handleSaveAndClose} 
-                      className="flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
-                    >
-                      💾 Save Game & Close
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={saveGame} 
-                      className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-                    >
-                      <span>{isSaved ? '✅' : '💾'}</span> {isSaved ? 'Saved!' : 'Save Game'}
-                    </button>
-                  )}
+                    <div className="flex flex-row gap-2">
+                      {isGameOver ? (
+                        <button
+                          onClick={handleStartNewGame}
+                          className="flex-1 bg-blue-600 text-white p-4 rounded-xl font-black active:bg-blue-700 transition-colors shadow-lg shadow-blue-100 dark:shadow-none"
+                        >
+                          🔄 Start New
+                        </button>
+                      ) : (
+                        <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">
+                          + Round
+                        </button>
+                      )}
+                      {isGameOver && (
+                        <button
+                          onClick={handleShare}
+                          className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
+                        >
+                          📤 Share
+                        </button>
+                      )}
+                      <button
+                        onClick={handleSaveAndClose}
+                        className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isGameOver ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                      >
+                        {isGameOver ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
+                      </button>
                     </div>
                   </div>
                 </div>

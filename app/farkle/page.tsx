@@ -63,6 +63,7 @@ export default function FarklePage() {
   const [playingView, setPlayingView] = useState<'GRID' | 'GRAPH'>('GRID');
   const [showCelebration, setShowCelebration] = useState(false);
   const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
+  const [gridEditVersion, setGridEditVersion] = useState(0);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('farkle_has_celebrated', false);
 
   const { activeSession, saveSession, clearSession } = useActiveSession();
@@ -236,7 +237,7 @@ export default function FarklePage() {
     startGame(true);
   };
 
-  const getOrCreateActiveGameId = () => {
+  const getOrCreateActiveGameId = useCallback(() => {
     if (typeof window === 'undefined') {
       return `farkle_${Date.now()}`;
     }
@@ -249,7 +250,7 @@ export default function FarklePage() {
     const nextId = `farkle_${Date.now()}`;
     window.localStorage.setItem('scorekeeper_active_game_id', nextId);
     return nextId;
-  };
+  }, []);
 
   const resetGameState = () => {
     setPlayers([]);
@@ -324,6 +325,30 @@ export default function FarklePage() {
     resetGameState();
     router.push('/history');
   };
+
+  const handleShare = () => {
+    const gameName = mode === 'stealing' ? 'Farkle Stealing' : 'Farkle';
+    const sortedPlayers = [...players].sort((a, b) => (totalScores[b.id] || 0) - (totalScores[a.id] || 0));
+    const scoreLines = sortedPlayers.map((p, i) => `${i + 1}. ${p.emoji} ${displayPlayerName(p)}: ${totalScores[p.id] || 0}`);
+    const shareText = `🏆 ${gameName}\n${scoreLines.join('\n')}`;
+    if (navigator.share) {
+      navigator.share({ title: `${gameName} Results`, text: shareText }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareText).catch(() => {});
+    }
+  };
+
+  // Auto-save on every score change so incomplete games appear in history
+  useEffect(() => {
+    if (phase !== 'PLAYING' || gridEditVersion === 0) return;
+    const timer = setTimeout(() => {
+      const gameRecord = buildFarkleGameRecord({ players, scores, mode, settings }, getOrCreateActiveGameId());
+      if (gameRecord) {
+        setGameHistory(prev => upsertGameRecord(prev, gameRecord));
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [getOrCreateActiveGameId, gridEditVersion, mode, phase, players, scores, settings, setGameHistory]);
 
   const addPlayer = async () => {
     const trimmedName = newPlayerName.trim();
@@ -477,6 +502,7 @@ export default function FarklePage() {
         [String(activeCell.roundIndex)]: scoreToSave
       }
     }));
+    setGridEditVersion((prev) => prev + 1);
 
     if (wasCurrentTurn) {
       if (currentPlayerIndex === players.length - 1) {
@@ -769,26 +795,28 @@ export default function FarklePage() {
 
           <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
             <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex gap-2">
                 {!isGameComplete && currentPlayer && (
                   <button
                     onClick={() => openScoreEntry(currentRoundIndex, currentPlayer.id)}
-                    className="rounded-xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/50 p-4 text-sm font-black text-blue-600 dark:text-blue-300 shadow-sm active:scale-[0.98] transition"
+                    className="flex-1 rounded-xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/50 p-4 text-sm font-black text-blue-600 dark:text-blue-300 shadow-sm active:scale-[0.98] transition"
                   >
                     🎯 Enter {displayPlayerName(currentPlayer)} Score
                   </button>
                 )}
-                <button
-                  onClick={() => void handleSaveGame()}
-                  className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-                >
-                  {isSaved ? '✅ Saved!' : '💾 Save Game'}
-                </button>
+                {isGameComplete && (
+                  <button
+                    onClick={handleShare}
+                    className="rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 p-4 text-sm font-black shadow-sm active:scale-[0.98] transition"
+                  >
+                    📤 Share
+                  </button>
+                )}
                 <button
                   onClick={() => void handleSaveAndClose()}
-                  className={`rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isGameComplete ? 'bg-red-600 text-white' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200'}`}
+                  className={`flex-1 rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isGameComplete ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
                 >
-                  {isGameComplete ? '🏁 Save & Close' : '⏹️ End Game'}
+                  {isGameComplete ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
                 </button>
               </div>
             </div>

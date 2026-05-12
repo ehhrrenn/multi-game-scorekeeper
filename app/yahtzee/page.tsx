@@ -8,7 +8,7 @@ import type { ActiveSession } from '../../hooks/useActiveSession';
 import { clearStoredGameState } from '../../lib/activeGameState';
 import { db } from '../../lib/firebase';
 import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
-import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
+import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, buildYahtzeeGraphSeries, saveGameRecordToCloud, upsertGameRecord, type GameRecord, type YahtzeeScoreEntry } from '../../lib/gameHistory';
 import { useGameState } from '../../hooks/useGameState'; 
 import BottomNav from '../components/BottomNav';
 import { useActiveSession } from '../../hooks/useActiveSession';
@@ -49,6 +49,7 @@ export default function YahtzeePage() {
   const [, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
   const [scores, setScores] = useGameState<YahtzeeScoreMap>('yahtzee_scores_v2', {});
+  const [scoreEntries, setScoreEntries] = useGameState<YahtzeeScoreEntry[]>('yahtzee_score_entries_v1', []);
 
   // --- Roster & UI State ---
   const [allAvailablePlayers, setAllAvailablePlayers] = useState<PlayerSnapshot[]>([]);
@@ -64,6 +65,7 @@ export default function YahtzeePage() {
   // --- Grid Interaction State ---
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('');
+  const [gridEditVersion, setGridEditVersion] = useState(0);
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
   const totalGridColumns = 1 + players.length * columnsPerPlayer;
 
@@ -110,10 +112,10 @@ export default function YahtzeePage() {
     saveSession(
       'yahtzee',
       players.filter((player) => player?.id).map((player) => player.id),
-      { players, scores, isTripleYahtzee, phase },
+      { players, scores, isTripleYahtzee, phase, scoreEntries },
       currentSessionId
     );
-  }, [currentSessionId, hasInProgressGame, isTripleYahtzee, phase, players, saveSession, scores]);
+  }, [currentSessionId, hasInProgressGame, isTripleYahtzee, phase, players, saveSession, scoreEntries, scores]);
 
   const persistSessionToHistory = async (session: ActiveSession) => {
     let gameRecord: GameRecord | null = null;
@@ -193,6 +195,7 @@ export default function YahtzeePage() {
         });
       });
       setScores(initialScores);
+      setScoreEntries([]);
     }
     
     getOrCreateActiveGameId();
@@ -200,9 +203,9 @@ export default function YahtzeePage() {
   };
 
   const handleSaveAndClose = async () => {
-    const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee }, getOrCreateActiveGameId(), {
+    const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee, scoreEntries }, getOrCreateActiveGameId(), {
       markCompleted: true,
-      completedReason: 'BUILT_IN_COMPLETE'
+      completedReason: isGameComplete ? 'BUILT_IN_COMPLETE' : 'MANUAL_FINISH'
     });
     if (!gameRecord) {
       router.push('/history');
@@ -221,6 +224,7 @@ export default function YahtzeePage() {
 
     setPlayers([]);
     setScores({});
+    setScoreEntries([]);
     clearSession();
     clearStoredGameState('yahtzee');
     router.push('/history');
@@ -230,7 +234,8 @@ export default function YahtzeePage() {
     const gameRecord = buildYahtzeeGameRecord({
       players,
       scores,
-      isTripleYahtzee
+      isTripleYahtzee,
+      scoreEntries
     }, getOrCreateActiveGameId());
 
     if (!gameRecord) {
@@ -241,6 +246,33 @@ export default function YahtzeePage() {
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
   };
+
+  const handleShare = () => {
+    const gameName = isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee';
+    const sortedPlayers = [...players].sort((a, b) => calcGrandTotal(b.id) - calcGrandTotal(a.id));
+    const scoreLines = sortedPlayers.map((p, i) => `${i + 1}. ${p.emoji} ${p.isCloudUser ? formatFirstName(p.name) : p.name}: ${calcGrandTotal(p.id)}`);
+    const shareText = `🏆 ${gameName}\n${scoreLines.join('\n')}`;
+    if (navigator.share) {
+      navigator.share({ title: `${gameName} Results`, text: shareText }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareText).catch(() => {});
+    }
+  };
+
+  // Auto-save on every score change so incomplete games appear in history
+  useEffect(() => {
+    if (phase !== 'PLAYING' || gridEditVersion === 0 || scoreEntries.length === 0) return;
+    const timer = setTimeout(() => {
+      const activeId = typeof window !== 'undefined'
+        ? (window.localStorage.getItem('scorekeeper_active_game_id') || `yahtzee_${Date.now()}`)
+        : `yahtzee_${Date.now()}`;
+      const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee, scoreEntries }, activeId);
+      if (gameRecord) {
+        setGameHistory(prev => upsertGameRecord(prev, gameRecord));
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [gridEditVersion, isTripleYahtzee, phase, players, scoreEntries, scores, setGameHistory]);
 
   const addPlayer = async () => {
     if (!newPlayerName.trim()) return;
@@ -296,6 +328,7 @@ export default function YahtzeePage() {
   const confirmClearSetup = () => {
     setPlayers([]);
     setScores({});
+    setScoreEntries([]);
     window.localStorage.removeItem('scorekeeper_active_game_id');
     if (activeSession?.gameType === 'yahtzee') {
       clearSession();
@@ -317,23 +350,19 @@ export default function YahtzeePage() {
   const handleSaveScore = (scoreToSave: number) => {
     if (!activeCell) return;
 
-    // 1. Update the score state
-    // Note: If your state setter is named something other than 'setScores', 
-    // change it here (e.g., setGameData, etc.)
+    const nextEntry: YahtzeeScoreEntry = {
+      playerId: activeCell.playerId,
+      categoryId: activeCell.category,
+      colIndex: activeCell.colIndex,
+      score: scoreToSave,
+    };
+
     setScores(prevScores => {
-      // Get the current player's scores, or default to an empty object
       const playerScores = prevScores[activeCell.playerId] || {};
-      
-      // Get the specific category array, or default to an array with nulls
       const categoryScores = playerScores[activeCell.category] || [null]; 
-      
-      // Copy the array to avoid mutating state directly
       const newCategoryScores = [...categoryScores];
-      
-      // Update the specific column index with the new score
       newCategoryScores[activeCell.colIndex] = scoreToSave;
 
-      // Return the newly constructed state
       return {
         ...prevScores,
         [activeCell.playerId]: {
@@ -342,8 +371,9 @@ export default function YahtzeePage() {
         }
       };
     });
+    setScoreEntries((prevEntries) => [...prevEntries, nextEntry]);
+    setGridEditVersion((prev) => prev + 1);
 
-    // 2. Clean up and close the modal
     setActiveCell(null);
     setInputValue('');
   };
@@ -568,12 +598,22 @@ export default function YahtzeePage() {
 
             <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
               <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
-                <button
-                  onClick={isGameComplete ? handleSaveAndClose : handleSaveGame}
-                  className={`w-full py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : isSaved ? 'bg-green-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
-                >
-                  <span>{isSaved && !isGameComplete ? '✅' : '💾'}</span> {isGameComplete ? 'Save & Close' : isSaved ? 'Saved!' : 'Save Game'}
-                </button>
+                <div className="flex gap-2">
+                  {isGameComplete && (
+                    <button
+                      onClick={handleShare}
+                      className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold px-4 py-3.5 rounded-xl text-base shadow-sm active:scale-95 transition-all"
+                    >
+                      📤 Share
+                    </button>
+                  )}
+                  <button
+                    onClick={handleSaveAndClose}
+                    className={`flex-1 py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                  >
+                    {isGameComplete ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
+                  </button>
+                </div>
               </div>
             </div>
             </>
@@ -581,33 +621,11 @@ export default function YahtzeePage() {
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-4 animate-in fade-in">
                 <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
                   {(() => {
-                    const categoryOrder = [...UPPER_CATEGORIES.map(c => c.id), ...LOWER_CATEGORIES.map(c => c.id)];
-                    const pointsData = players.map((p) => {
-                      let runningTotal = 0;
-                      const points = [0];
-
-                      for (let colIdx = 0; colIdx < columnsPerPlayer; colIdx += 1) {
-                        const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
-                        let upperTotal = 0;
-
-                        for (const categoryId of categoryOrder) {
-                          const value = scores[p.id]?.[categoryId]?.[colIdx] || 0;
-                          points.push(points[points.length - 1] + value * multiplier);
-                          runningTotal += value * multiplier;
-
-                          if (UPPER_CATEGORIES.some(cat => cat.id === categoryId)) {
-                            upperTotal += value;
-                          }
-                        }
-
-                        const bonus = calcUpperBonus(upperTotal) * multiplier;
-                        if (bonus > 0) {
-                          points.push(points[points.length - 1] + bonus);
-                          runningTotal += bonus;
-                        }
-                      }
-
-                      return { id: p.id, emoji: p.emoji, name: p.name, isCloudUser: p.isCloudUser, points, finalScore: runningTotal };
+                    const pointsData = buildYahtzeeGraphSeries({
+                      players,
+                      scores,
+                      isTripleYahtzee,
+                      scoreEntries,
                     });
 
                     const allScores = pointsData.flatMap(d => d.points);
