@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ActiveSession } from '../../hooks/useActiveSession';
 import { clearStoredGameState } from '../../lib/activeGameState';
@@ -45,7 +46,7 @@ export default function YahtzeePage() {
   const [phase, setPhase] = useState<'SETUP' | 'PLAYING'>('SETUP');
   const [players, setPlayers] = useGameState<Player[]>('yahtzee_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
-  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  const [, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [isTripleYahtzee, setIsTripleYahtzee] = useGameState<boolean>('yahtzee_is_triple', false);
   const [scores, setScores] = useGameState<YahtzeeScoreMap>('yahtzee_scores_v2', {});
 
@@ -73,7 +74,8 @@ export default function YahtzeePage() {
 
   useEffect(() => {
     if (players.length > 0 && Object.keys(scores).length > 0) {
-      setPhase('PLAYING');
+      const transition = setTimeout(() => setPhase('PLAYING'), 0);
+      return () => clearTimeout(transition);
     }
   }, [players.length, scores]);
 
@@ -198,7 +200,10 @@ export default function YahtzeePage() {
   };
 
   const handleSaveAndClose = async () => {
-    const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee }, getOrCreateActiveGameId());
+    const gameRecord = buildYahtzeeGameRecord({ players, scores, isTripleYahtzee }, getOrCreateActiveGameId(), {
+      markCompleted: true,
+      completedReason: 'BUILT_IN_COMPLETE'
+    });
     if (!gameRecord) {
       router.push('/history');
       return;
@@ -256,7 +261,7 @@ export default function YahtzeePage() {
           isGuest: true,
           isAuthUser: false
         });
-      } catch (err) {}
+      } catch {}
     }
   };
 
@@ -268,9 +273,9 @@ export default function YahtzeePage() {
   };
 
   const updateEmoji = async (playerId: string, newEmoji: string) => {
-    setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
-    setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
-    setGlobalRoster(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    setPlayers(players.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p));
+    setAllAvailablePlayers(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p));
+    setGlobalRoster(prev => prev.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p));
     const playerToUpdate = players.find(p => p.id === playerId) || allAvailablePlayers.find(p => p.id === playerId);
     if (db && playerToUpdate) {
       try {
@@ -279,17 +284,13 @@ export default function YahtzeePage() {
           name: playerToUpdate.name,
           emoji: newEmoji,
           photoURL: playerToUpdate.photoURL,
-          useCustomEmoji: playerToUpdate.useCustomEmoji,
+          useCustomEmoji: true,
           isCloudUser: true,
           isGuest: !playerToUpdate.photoURL,
           isAuthUser: Boolean(playerToUpdate.photoURL)
         });
-      } catch (err) {}
+      } catch {}
     }
-  };
-
-  const clearSetup = () => {
-    setShowClearSetupConfirm(true);
   };
 
   const confirmClearSetup = () => {
@@ -311,22 +312,6 @@ export default function YahtzeePage() {
     setActiveCell({ playerId, category, colIndex });
     const currentVal = scores[playerId]?.[category]?.[colIndex];
     setInputValue(currentVal !== null && currentVal !== undefined ? currentVal.toString() : '');
-  };
-
-  const saveScore = () => {
-    if (!activeCell) return;
-    const { playerId, category, colIndex } = activeCell;
-    const numericValue = inputValue === '' ? null : parseInt(inputValue, 10);
-    
-    setScores(prev => {
-      const playerScores = prev[playerId] || {};
-      const catScores = playerScores[category] ? [...playerScores[category]] : Array(columnsPerPlayer).fill(null);
-      catScores[colIndex] = numericValue;
-      return { ...prev, [playerId]: { ...playerScores, [category]: catScores } };
-    });
-    
-    setActiveCell(null);
-    setInputValue('');
   };
 
   const handleSaveScore = (scoreToSave: number) => {
@@ -456,7 +441,7 @@ export default function YahtzeePage() {
                           <th key={p.id} colSpan={columnsPerPlayer} className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
                             <div className="flex flex-col items-center gap-1">
                               <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-xl shadow-sm overflow-hidden">
-                                {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <img src={p.photoURL} alt={p.name} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
+                                {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
                               </div>
                               <div className="text-[11px] font-black uppercase tracking-wide truncate w-full px-1 text-center">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
                               {isTripleYahtzee && (

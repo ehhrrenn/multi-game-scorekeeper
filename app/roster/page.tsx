@@ -2,10 +2,12 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
+import { getWinnerIdsForRecord, isGameCompleted } from '../../lib/gameHistory';
 import { useGameState } from '../../hooks/useGameState';
 
 // --- Types ---
@@ -13,9 +15,10 @@ type Player = { id: string; name: string; emoji: string; photoURL?: string; isGu
 type Round = { roundId: number; scores: Record<string, number> };
 type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string };
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
-type GameSettings = { target: number };
+type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
 type MatchRecord = {
+  gameId?: string;
   matchId: string;
   date: string; 
   gameName: string;
@@ -87,12 +90,25 @@ export default function RosterPage() {
 
   const allHistory = useMemo(() => {
     const combined = [...localHistory, ...cloudHistory];
-    // Deduplicate by matchId
-    return Array.from(new Map(combined.map(h => [h.matchId, h])).values());
+    // Deduplicate by gameId (cloud) with matchId fallback (legacy local)
+    return Array.from(new Map(combined.map(h => [h.gameId || h.matchId, h])).values());
   }, [localHistory, cloudHistory]);
 
   // 5. Analytics Engine (Running on merged data)
   const playerStats = useMemo(() => {
+    const getScoreDirectionForGame = (game: MatchRecord): 'UP' | 'DOWN' => {
+      if (game.settings?.scoreDirection) {
+        return game.settings.scoreDirection;
+      }
+
+      const profile = gameProfiles.find((entry) => entry.name === game.gameName);
+      if (profile?.scoreDirection) {
+        return profile.scoreDirection;
+      }
+
+      return profile?.winCondition === 'LOW' ? 'DOWN' : 'UP';
+    };
+
     const statsMap: Record<string, PlayerStats> = {};
 
     allPlayers.forEach(p => {
@@ -116,24 +132,9 @@ export default function RosterPage() {
     });
 
     allHistory.forEach(game => {
-      const profile = gameProfiles.find(p => p.name === game.gameName) || gameProfiles[0];
-      const winCondition = profile.winCondition;
-      let winningScore = winCondition === 'HIGH' ? -Infinity : Infinity;
-      let winners: string[] = [];
-
-      // Find the winning score
-      game.activePlayerIds.forEach(pid => {
-        const score = game.finalScores[pid];
-        if (score !== undefined) {
-          if ((winCondition === 'HIGH' && score > winningScore) || 
-              (winCondition === 'LOW' && score < winningScore)) {
-            winningScore = score;
-            winners = [pid];
-          } else if (score === winningScore) {
-            winners.push(pid);
-          }
-        }
-      });
+      const completed = isGameCompleted(game);
+      const winners = completed ? getWinnerIdsForRecord(game, getScoreDirectionForGame(game)) : [];
+      const scoreDirection = getScoreDirectionForGame(game);
 
       // Update stats
       game.activePlayerIds.forEach(pid => {
@@ -149,7 +150,7 @@ export default function RosterPage() {
         if (pStats.gamesPlayed === 1) {
           pStats.bestScore = score;
         } else {
-          if (winCondition === 'HIGH') {
+          if (scoreDirection === 'UP') {
             pStats.bestScore = Math.max(pStats.bestScore, score);
           } else {
             pStats.bestScore = Math.min(pStats.bestScore, score);
@@ -216,7 +217,7 @@ return (
                   {/* Matching Avatar Sizing */}
                   <div className="w-14 h-14 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-3xl shadow-sm overflow-hidden flex-shrink-0">
                     {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                      <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover" />
+                      <Image src={p.photoURL} alt={p.name} width={56} height={56} unoptimized className="w-full h-full object-cover" />
                     ) : (
                       <span>{p.emoji || '👤'}</span>
                     )}

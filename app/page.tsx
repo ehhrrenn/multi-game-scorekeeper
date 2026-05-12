@@ -36,21 +36,19 @@ export default function Home() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
   const [rounds, setRounds] = useGameState<Round[]>('scorekeeper_rounds', [{ roundId: 1, scores: {} }]);
   const [matchHistory, setMatchHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  const [, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [gameName, setGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
-  const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
+  const [, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
   const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
 
-  const [mounted, setMounted] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const [pendingGameName, setPendingGameName] = useState('Custom Game');
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const handleScroll = () => setIsScrolled(window.scrollY > 40);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -208,14 +206,22 @@ export default function Home() {
     navigateToPendingRoute();
   };
 
-  if (!mounted) return null;
-
   return (
     <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
 
       {/* 🟢 NEW CLOUD LOGIN HEADER - Pushes button to top right */}
       <header className="max-w-screen-md mx-auto px-4 pt-4 flex justify-end z-50 relative">
-        <AuthButton />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/notes')}
+            className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-center text-lg hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+            aria-label="Shared Notes"
+            title="Shared Notes"
+          >
+            📝
+          </button>
+          <AuthButton />
+        </div>
       </header>
       {/* STICKY HEADER */}
       <div className={`fixed top-0 left-0 right-0 h-16 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 transition-all duration-300 flex items-center px-4 max-w-screen-md mx-auto ${isScrolled ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
@@ -263,7 +269,6 @@ export default function Home() {
         <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2">Custom Games</h2>
         
         <div className="grid gap-3 mb-8">
-
           <button onClick={() => router.push('/choosy')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">

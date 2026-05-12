@@ -1,13 +1,15 @@
 // app/components/AuthButton.tsx
 'use client';
 
+import Image from 'next/image';
 import { auth, db, firebaseConfigError, isFirebaseConfigured } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { formatFirstName, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useAuth } from '../../hooks/useAuth';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function AuthButton() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const safeAuth = auth;
   const safeDb = db;
 
@@ -30,11 +32,16 @@ export default function AuthButton() {
       const result = await signInWithPopup(safeAuth, provider);
       
       if (result.user) {
+        const existingRef = doc(safeDb, 'users', result.user.uid);
+        const existingSnap = await getDoc(existingRef);
+        const existing = existingSnap.exists() ? (existingSnap.data() as { emoji?: string; photoURL?: string; useCustomEmoji?: boolean }) : null;
+
         await upsertCloudPlayer(safeDb, {
           id: result.user.uid,
           name: result.user.displayName || 'Anonymous Player',
-          emoji: '👤',
-          photoURL: result.user.photoURL || '',
+          emoji: existing?.emoji || '👤',
+          photoURL: existing?.photoURL || result.user.photoURL || '',
+          useCustomEmoji: existing?.useCustomEmoji || false,
           isCloudUser: true,
           isGuest: false,
           isAuthUser: true,
@@ -51,16 +58,31 @@ export default function AuthButton() {
   }
 
   if (user) {
+    const useCustomEmoji = Boolean(profile?.useCustomEmoji);
+    const displayEmoji = profile?.emoji || '👤';
+    const displayName = profile?.name || user.displayName || '';
+    const displayPhotoURL = profile?.photoURL || user.photoURL || '';
+
     return (
       <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 py-1.5 pl-1.5 pr-4 rounded-full shadow-sm">
-        <img 
-          src={user.photoURL || ''} 
-          alt="Profile" 
-          className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" 
-        />
+        <div className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-base">
+          {useCustomEmoji || !displayPhotoURL ? (
+            <span>{displayEmoji}</span>
+          ) : (
+            <Image
+              src={displayPhotoURL}
+              alt="Profile"
+              width={32}
+              height={32}
+              unoptimized
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+            />
+          )}
+        </div>
         <div className="flex flex-col">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Player 1</span>
-          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none mt-1 truncate max-w-[100px]">{formatFirstName(user.displayName || '')}</span>
+          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 leading-none mt-1 truncate max-w-[100px]">{formatFirstName(displayName)}</span>
         </div>
         <button 
           onClick={() => signOut(safeAuth)} 

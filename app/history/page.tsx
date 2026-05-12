@@ -1,18 +1,25 @@
 // app/history/page.tsx
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { formatFirstName } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState';
+import {
+  getWinnerIdsForRecord,
+  inferHasBuiltInEndRule,
+  isGameCompleted,
+  saveGameRecordToCloud,
+  type GameRecord,
+} from '../../lib/gameHistory';
 import BottomNav from '../components/BottomNav';
 import GameCard from '../components/GameCard';
 
 // --- Types ---
 type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
-type Round = { roundId: number; scores: Record<string, number> };
-type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
+type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection?: 'UP' | 'DOWN' };
 
 type HeroStat = { wins: number; played: number; name: string; emoji: string; photoURL?: string };
 type HeroStatWithPct = HeroStat & { pct: number };
@@ -23,16 +30,7 @@ type HeroStats = {
   threshold: number;
 };
 
-export type GameRecord = {
-  gameId: string;
-  date: string;
-  gameName: string;
-  finalScores: Record<string, number>;
-  activePlayerIds: string[];
-  savedRounds?: Round[];
-  playerSnapshots: PlayerSnapshot[];
-  settings?: GameSettings;
-};
+const TIME_FILTERS: Array<'1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL'> = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 
 export default function HistoryPage() {
   // 1. Cloud State
@@ -41,6 +39,7 @@ export default function HistoryPage() {
 
   // 2. Local State (Legacy Fallback)
   const [localHistory, setLocalHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
   
   // --- Filters & Toggles ---
   const [selectedGame, setSelectedGame] = useState<string>('ALL');
@@ -103,20 +102,58 @@ export default function HistoryPage() {
     });
   }, [allHistory, selectedGame, selectedPlayer]);
 
-  const getWinnerIds = (game: GameRecord) => {
-    const isCountDown = game.settings?.scoreDirection === 'DOWN';
-    let bestScore = isCountDown ? Infinity : -Infinity;
-    let winners: string[] = [];
+  const getScoreDirectionForGame = useCallback((game: GameRecord): 'UP' | 'DOWN' => {
+    if (game.settings?.scoreDirection) {
+      return game.settings.scoreDirection;
+    }
 
-    Object.entries(game.finalScores).forEach(([pId, score]) => {
-      if (isCountDown ? score < bestScore : score > bestScore) {
-        bestScore = score;
-        winners = [pId];
-      } else if (score === bestScore) {
-        winners.push(pId);
-      }
-    });
-    return winners;
+    const profile = gameProfiles.find((entry) => entry.name === game.gameName);
+    if (profile?.scoreDirection) {
+      return profile.scoreDirection;
+    }
+
+    return profile?.winCondition === 'LOW' ? 'DOWN' : 'UP';
+  }, [gameProfiles]);
+
+  const getWinnerIds = useCallback((game: GameRecord) => {
+    if (!isGameCompleted(game)) {
+      return [];
+    }
+
+    if (game.winnerIds?.length) {
+      return game.winnerIds;
+    }
+
+    return getWinnerIdsForRecord(game, getScoreDirectionForGame(game));
+  }, [getScoreDirectionForGame]);
+
+  const handleFinishGame = async (gameToFinish: GameRecord) => {
+    const scoreDirection = getScoreDirectionForGame(gameToFinish);
+    const completedRecord: GameRecord = {
+      ...gameToFinish,
+      settings: {
+        target: gameToFinish.settings?.target || 0,
+        scoreDirection,
+      },
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      completedReason: 'MANUAL_FINISH',
+      winnerIds: getWinnerIdsForRecord(gameToFinish, scoreDirection),
+      hasBuiltInEndRule: inferHasBuiltInEndRule(gameToFinish),
+    };
+
+    setLocalHistory((prev) => prev.map((game) => (game.gameId === completedRecord.gameId ? completedRecord : game)));
+    setCloudHistory((prev) => prev.map((game) => (game.gameId === completedRecord.gameId ? completedRecord : game)));
+
+    if (!db) {
+      return;
+    }
+
+    try {
+      await saveGameRecordToCloud(db, completedRecord);
+    } catch (error) {
+      console.error('Error finalizing game in cloud:', error);
+    }
   };
 
   const handleDeleteGame = async (gameIdToDelete: string) => {
@@ -142,7 +179,9 @@ export default function HistoryPage() {
     
     // Apply Time Filter
     if (timeFilter !== 'ALL') {
-      const now = Date.now();
+      const now = chronologicalHistory.length
+        ? Math.max(...chronologicalHistory.map((game) => new Date(game.date).getTime()))
+        : 0;
       const ranges = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
       const cutoff = now - (ranges[timeFilter] * 24 * 60 * 60 * 1000);
       chronologicalHistory = chronologicalHistory.filter(game => new Date(game.date).getTime() >= cutoff);
@@ -155,6 +194,9 @@ export default function HistoryPage() {
     } else {
       const winCounts: Record<string, number> = {};
       chronologicalHistory.forEach(game => {
+        if (!isGameCompleted(game)) {
+          return;
+        }
         getWinnerIds(game).forEach(wId => winCounts[wId] = (winCounts[wId] || 0) + 1);
       });
       const top3Ids = Object.entries(winCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
@@ -167,7 +209,7 @@ export default function HistoryPage() {
       const points: number[] = [0]; 
 
       chronologicalHistory.forEach(game => {
-        if (game.activePlayerIds.includes(player.id)) {
+        if (isGameCompleted(game) && game.activePlayerIds.includes(player.id)) {
           gamesPlayedByPlayer++;
           const winners = getWinnerIds(game);
           if (winners.includes(player.id)) cumulativeWins++;
@@ -181,7 +223,7 @@ export default function HistoryPage() {
 
       return { ...player, points };
     });
-  }, [filteredHistory, selectedPlayer, uniquePlayers, graphMode, timeFilter]);
+  }, [filteredHistory, getWinnerIds, graphMode, selectedPlayer, timeFilter, uniquePlayers]);
 
   const heroStats = useMemo<HeroStats>(() => {
     const totalGames = filteredHistory.length;
@@ -190,6 +232,10 @@ export default function HistoryPage() {
     uniquePlayers.forEach(p => { playerStats[p.id] = { wins: 0, played: 0, name: p.name, emoji: p.emoji, photoURL: p.photoURL }; });
 
     filteredHistory.forEach(game => {
+      if (!isGameCompleted(game)) {
+        return;
+      }
+
       const winners = getWinnerIds(game);
       game.activePlayerIds.forEach(pId => {
         if (playerStats[pId]) {
@@ -222,7 +268,7 @@ export default function HistoryPage() {
     });
 
     return { totalGames, mostWinsPlayer, highestWinPctPlayer, threshold };
-  }, [filteredHistory, uniquePlayers]);
+  }, [filteredHistory, getWinnerIds, uniquePlayers]);
 
   if (loading) {
     return (
@@ -290,7 +336,7 @@ export default function HistoryPage() {
             {heroStats.mostWinsPlayer ? (
                <div className="relative z-10 flex items-center gap-2 mt-1">
                  {heroStats.mostWinsPlayer.photoURL ? (
-                    <img src={heroStats.mostWinsPlayer.photoURL} alt="" className="w-6 h-6 rounded-full border border-white/30 object-cover" />
+                    <Image src={heroStats.mostWinsPlayer.photoURL} alt="" width={24} height={24} unoptimized className="w-6 h-6 rounded-full border border-white/30 object-cover" />
                  ) : (
                     <span className="text-lg">{heroStats.mostWinsPlayer.emoji}</span>
                  )}
@@ -310,7 +356,7 @@ export default function HistoryPage() {
             {heroStats.highestWinPctPlayer ? (
                <div className="relative z-10 flex items-center gap-2 mt-1">
                  {heroStats.highestWinPctPlayer.photoURL ? (
-                    <img src={heroStats.highestWinPctPlayer.photoURL} alt="" className="w-6 h-6 rounded-full border border-white/30 object-cover" />
+                    <Image src={heroStats.highestWinPctPlayer.photoURL} alt="" width={24} height={24} unoptimized className="w-6 h-6 rounded-full border border-white/30 object-cover" />
                  ) : (
                     <span className="text-lg">{heroStats.highestWinPctPlayer.emoji}</span>
                  )}
@@ -345,10 +391,10 @@ export default function HistoryPage() {
               
               {/* TIME RANGE TOGGLE */}
               <div className="flex bg-slate-50 dark:bg-slate-950/50 p-1 rounded-lg mb-4 border border-slate-100 dark:border-slate-800 overflow-x-auto scrollbar-hide">
-                {['1W', '1M', '3M', '6M', '1Y', 'ALL'].map(tf => (
+                {TIME_FILTERS.map(tf => (
                   <button 
                     key={tf}
-                    onClick={() => setTimeFilter(tf as any)} 
+                    onClick={() => setTimeFilter(tf)} 
                     className={`flex-1 min-w-[40px] py-1.5 rounded-md text-[10px] font-bold transition-all ${timeFilter === tf ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
                   >
                     {tf === 'ALL' ? 'All Time' : tf}
@@ -425,9 +471,13 @@ export default function HistoryPage() {
               <GameCard 
                 key={`${game.gameId}-${index}`}
                 game={game} 
+                winnerIds={getWinnerIds(game)}
+                isComplete={isGameCompleted(game)}
+                canFinish={!inferHasBuiltInEndRule(game) && !isGameCompleted(game)}
                 isExpanded={expandedGameId === game.gameId}
                 onToggle={() => setExpandedGameId(prev => prev === game.gameId ? null : game.gameId)}
                 onDelete={handleDeleteGame}
+                onFinish={() => void handleFinishGame(game)}
               />
             ))}
           </div>

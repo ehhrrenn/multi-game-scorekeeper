@@ -1,7 +1,8 @@
 // app/custom/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
 import type { ActiveSession } from '../../hooks/useActiveSession';
@@ -17,7 +18,7 @@ import ScoreEntrySheet from '../components/ScoreEntrySheet';
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW' };
+type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
 // --- Helpers ---
@@ -32,6 +33,10 @@ const EMOJI_COLORS: Record<string, string> = {
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 const getPlayerColor = (emoji: string) => EMOJI_COLORS[emoji] || '#3b82f6';
+const pseudoRandom = (seed: number) => {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
 
 export default function CustomTracker() {
   const [players, setPlayers] = useGameState<Player[]>('scorekeeper_players', []);
@@ -40,7 +45,7 @@ export default function CustomTracker() {
   const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0, scoreDirection: 'UP' });
-  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
+  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   
   const [activeGameId, setActiveGameId] = useGameState<string | null>('scorekeeper_active_game_id', null);
@@ -51,7 +56,19 @@ export default function CustomTracker() {
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
   const [isSaved, setIsSaved] = useState(false);
-  const [viewMode, setViewMode] = useState<'SETUP' | 'GRID' | 'GRAPH'>('GRID');
+  const [viewMode, setViewMode] = useState<'SETUP' | 'GRID' | 'GRAPH'>(() => {
+    if (typeof window === 'undefined') {
+      return 'GRID';
+    }
+
+    try {
+      const storedPlayers = window.localStorage.getItem('scorekeeper_players');
+      const parsedPlayers = storedPlayers ? JSON.parse(storedPlayers) : [];
+      return parsedPlayers.length === 0 ? 'SETUP' : 'GRID';
+    } catch {
+      return 'GRID';
+    }
+  });
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
   
   const [isCreatingGame, setIsCreatingGame] = useState(false);
@@ -113,16 +130,7 @@ const allAvailablePlayers = useMemo(() => {
         setSettings({ target: 0, scoreDirection: 'UP' });
       }
     }
-  }, [activeGameName, viewMode, isGameStarted]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedPlayers = window.localStorage.getItem('scorekeeper_players');
-      const parsedPlayers = storedPlayers ? JSON.parse(storedPlayers) : [];
-      if (parsedPlayers.length === 0) setViewMode('SETUP');
-      else setViewMode('GRID');
-    }
-  }, []);
+  }, [activeGameName, gameHistory, isGameStarted, setSettings, viewMode]);
 
   useEffect(() => {
     if (!players.length) {
@@ -137,10 +145,10 @@ const allAvailablePlayers = useMemo(() => {
     );
   }, [activeGameId, activeGameName, currentSessionId, players, rounds, saveSession, settings]);
 
-  const calculateTotal = (pId: string) => {
+  const calculateTotal = useCallback((pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
     return settings.scoreDirection === 'DOWN' ? settings.target - sum : sum;
-  };
+  }, [rounds, settings.scoreDirection, settings.target]);
 
 // 1. First, strip out any null/ghost players
   const validPlayers = players.filter(p => p && p.id);
@@ -172,7 +180,7 @@ const allAvailablePlayers = useMemo(() => {
 
     const winningPlayer = players.find(p => p.id === winnerId);
     return { isGameOver: over, currentWinner: winningPlayer };
-  }, [rounds, players, settings.target, settings.scoreDirection, isRoundComplete]);
+  }, [calculateTotal, isRoundComplete, players, settings.scoreDirection, settings.target]);
 
   useEffect(() => {
     if (validPlayers.length === 0 || rounds.length === 0 || isGameOver || !isRoundComplete) {
@@ -200,10 +208,17 @@ const allAvailablePlayers = useMemo(() => {
 
   useEffect(() => {
     if (isGameOver && !hasCelebrated && currentWinner) {
-      setWinnerEmoji(currentWinner.emoji);
-      setShowCelebration(true);
-      setHasCelebrated(true);
-      setTimeout(() => setShowCelebration(false), 5000);
+      const celebrationStart = setTimeout(() => {
+        setWinnerEmoji(currentWinner.emoji);
+        setShowCelebration(true);
+        setHasCelebrated(true);
+      }, 0);
+      const celebrationEnd = setTimeout(() => setShowCelebration(false), 5000);
+
+      return () => {
+        clearTimeout(celebrationStart);
+        clearTimeout(celebrationEnd);
+      };
     }
   }, [isGameOver, hasCelebrated, setHasCelebrated, currentWinner]);
 
@@ -211,7 +226,7 @@ const allAvailablePlayers = useMemo(() => {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
     if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameProfiles([{ name: trimmed, winCondition: 'HIGH' }, ...gameProfiles]);
+      setGameProfiles([{ name: trimmed, winCondition: 'HIGH', scoreDirection: 'UP' }, ...gameProfiles]);
     }
     setActiveGameName(trimmed);
     setNewGameInput('');
@@ -230,6 +245,14 @@ const allAvailablePlayers = useMemo(() => {
 
   const updateProfileRule = (updates: Partial<GameProfile>) => {
     setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, ...updates } : p));
+
+    if (updates.winCondition === 'LOW') {
+      setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' }));
+    }
+
+    if (updates.winCondition === 'HIGH') {
+      setSettings((prev) => ({ ...prev, scoreDirection: 'UP' }));
+    }
   };
 
   const clearSetup = () => {
@@ -277,12 +300,6 @@ const allAvailablePlayers = useMemo(() => {
     setIsCreatingPlayer(false);
   };
 
-  const selectFromGlobal = (player: Player) => {
-    if (!players.find(p => p.id === player.id)) setPlayers([...players, player]);
-  };
-
-  const removePlayer = (playerId: string) => setPlayers(players.filter(p => p && p.id !== playerId));
-
   const movePlayer = (index: number, direction: 'UP' | 'DOWN') => {
     const newPlayers = [...players];
     if (direction === 'UP' && index > 0) {
@@ -294,12 +311,12 @@ const allAvailablePlayers = useMemo(() => {
   };
 
   const updateEmoji = async (playerId: string, newEmoji: string) => {
-    const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p);
+    const updatedPlayers = players.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p);
     setPlayers(updatedPlayers);
-    setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p));
+    setGlobalRoster(globalRoster.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p));
     setGameHistory(gameHistory.map(game => ({
       ...game,
-      playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji } : p)
+      playerSnapshots: game.playerSnapshots.map(p => p.id === playerId ? { ...p, emoji: newEmoji, useCustomEmoji: true } : p)
     })));
 
     const playerToUpdate = updatedPlayers.find(p => p.id === playerId);
@@ -310,7 +327,7 @@ const allAvailablePlayers = useMemo(() => {
           name: playerToUpdate.name,
           emoji: newEmoji,
           photoURL: playerToUpdate.photoURL,
-          useCustomEmoji: playerToUpdate.useCustomEmoji,
+          useCustomEmoji: true,
           isCloudUser: true,
           isGuest: !playerToUpdate.photoURL,
           isAuthUser: Boolean(playerToUpdate.photoURL)
@@ -427,7 +444,10 @@ const allAvailablePlayers = useMemo(() => {
       activeGameName,
       settings,
       activeGameId
-    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`);
+    }, `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, {
+      markCompleted: true,
+      completedReason: isGameOver ? 'TARGET_REACHED' : 'MANUAL_FINISH'
+    });
 
     if (!gameRecord) {
       router.push('/history');
@@ -493,13 +513,19 @@ const allAvailablePlayers = useMemo(() => {
     setActiveCell(null);
   };
 
-  const rainDrops = useMemo(() => Array.from({ length: 40 }).map((_, i) => ({
-    id: i,
-    emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
-    left: `${Math.random() * 100}%`,
-    animationDuration: `${Math.random() * 2 + 2}s`,
-    animationDelay: `${Math.random() * 2}s`
-  })), [winnerEmoji]);
+  const rainDrops = useMemo(() => {
+    const emojiSeed = winnerEmoji.codePointAt(0) || 0;
+    return Array.from({ length: 40 }).map((_, i) => {
+      const base = emojiSeed + i * 17;
+      return {
+        id: i,
+        emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
+        left: `${(pseudoRandom(base) * 100).toFixed(2)}%`,
+        animationDuration: `${(pseudoRandom(base + 1) * 2 + 2).toFixed(2)}s`,
+        animationDelay: `${(pseudoRandom(base + 2) * 2).toFixed(2)}s`
+      };
+    });
+  }, [winnerEmoji]);
   const gridWinConditionLabel = activeProfile?.winCondition === 'LOW' ? 'Lowest total wins' : 'Highest total wins';
   const gridTargetLabel = settings.target > 0
     ? `${settings.scoreDirection === 'DOWN' ? 'Start From' : 'Target'} ${settings.target.toLocaleString()}`
@@ -732,7 +758,7 @@ const allAvailablePlayers = useMemo(() => {
                               <div className="flex flex-col items-center gap-1">
                                 <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
                                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                                    <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+                                    <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized className="w-full h-full object-cover rounded-full" />
                                   ) : (
                                     <span>{p.emoji || '👤'}</span>
                                   )}
@@ -835,7 +861,7 @@ const allAvailablePlayers = useMemo(() => {
                     <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlayerColor(p.emoji) }}></div>
                       <span>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                          <img src={p.photoURL} alt={p.name} className="w-4 h-4 object-cover rounded-full" />
+                          <Image src={p.photoURL} alt={p.name} width={16} height={16} unoptimized className="w-4 h-4 object-cover rounded-full" />
                         ) : (
                           <span>{p.emoji || '👤'}</span>
                         )}</span>

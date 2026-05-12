@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ActiveSession } from '../../hooks/useActiveSession';
 import { clearStoredGameState } from '../../lib/activeGameState';
@@ -21,6 +22,10 @@ type ActiveCell = { roundIndex: number; playerId: string } | null;
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 const DEFAULT_SETTINGS: FarkleSettings = { targetScore: 10000, roundCount: null };
 const DEFAULT_ROUND_COUNT = 10;
+const pseudoRandom = (seed: number) => {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
 
 function displayPlayerName(player: PlayerSnapshot): string {
   if (player.isCloudUser) {
@@ -35,7 +40,7 @@ export default function FarklePage() {
   const [phase, setPhase] = useGameState<'SETUP' | 'PLAYING'>('farkle_phase', 'SETUP');
   const [players, setPlayers] = useGameState<Player[]>('farkle_players', []);
   const [globalRoster, setGlobalRoster] = useGameState<Player[]>('scorekeeper_global_roster', []);
-  const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
+  const [, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   const [scores, setScores] = useGameState<FarkleScoreMap>('farkle_scores', {});
   const [mode, setMode] = useGameState<FarkleMode>('farkle_mode', 'regular');
   const [settings, setSettings] = useGameState<FarkleSettings>('farkle_settings', DEFAULT_SETTINGS);
@@ -111,10 +116,10 @@ export default function FarklePage() {
     );
   }, [currentPlayerIndex, currentRoundIndex, currentSessionId, hasInProgressGame, mode, phase, players, saveSession, scores, settings]);
 
-  const getRoundScore = (playerId: string, roundIndex: number): number | null => {
+  const getRoundScore = useCallback((playerId: string, roundIndex: number): number | null => {
     const value = scores[playerId]?.[String(roundIndex)];
     return typeof value === 'number' ? value : null;
-  };
+  }, [scores]);
 
   const totalScores = useMemo(() => {
     return Object.fromEntries(
@@ -141,7 +146,7 @@ export default function FarklePage() {
     }
 
     return roundIndex;
-  }, [players, scores]);
+  }, [getRoundScore, players]);
 
   const targetReachedRoundIndex = useMemo(() => {
     if (settings.targetScore <= 0 || players.length === 0) {
@@ -166,7 +171,7 @@ export default function FarklePage() {
     }
 
     return null;
-  }, [settings.targetScore, players, highestSavedRoundIndex, currentRoundIndex, scores]);
+  }, [currentRoundIndex, getRoundScore, highestSavedRoundIndex, players, settings.targetScore]);
 
   const targetReached = targetReachedRoundIndex !== null;
   const roundLimitReached = settings.roundCount !== null && completedRoundCount >= settings.roundCount;
@@ -176,7 +181,10 @@ export default function FarklePage() {
   const isGameComplete = players.length > 0 && (usesRoundWinCondition ? roundLimitReached : finalRoundCompletedForTarget);
   const currentPlayer = players[currentPlayerIndex] || null;
   const highestTotal = players.length ? Math.max(...players.map((player) => totalScores[player.id] || 0)) : 0;
-  const winningPlayers = isGameComplete ? players.filter((player) => (totalScores[player.id] || 0) === highestTotal) : [];
+  const winningPlayers = useMemo(
+    () => (isGameComplete ? players.filter((player) => (totalScores[player.id] || 0) === highestTotal) : []),
+    [highestTotal, isGameComplete, players, totalScores]
+  );
   const visibleRoundCount = Math.max(
     1,
     currentRoundIndex + 1,
@@ -375,9 +383,9 @@ export default function FarklePage() {
   };
 
   const updateEmoji = async (playerId: string, nextEmoji: string) => {
-    setPlayers((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji } : player)));
-    setAllAvailablePlayers((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji } : player)));
-    setGlobalRoster((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji } : player)));
+    setPlayers((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji, useCustomEmoji: true } : player)));
+    setAllAvailablePlayers((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji, useCustomEmoji: true } : player)));
+    setGlobalRoster((prev) => prev.map((player) => (player.id === playerId ? { ...player, emoji: nextEmoji, useCustomEmoji: true } : player)));
 
     const player = players.find((entry) => entry.id === playerId) || allAvailablePlayers.find((entry) => entry.id === playerId);
     if (db && player) {
@@ -387,7 +395,7 @@ export default function FarklePage() {
           name: player.name,
           emoji: nextEmoji,
           photoURL: player.photoURL,
-          useCustomEmoji: player.useCustomEmoji,
+          useCustomEmoji: true,
           isCloudUser: true,
           isGuest: !player.photoURL,
           isAuthUser: Boolean(player.photoURL)
@@ -495,20 +503,33 @@ export default function FarklePage() {
 
   useEffect(() => {
     if (isGameComplete && !hasCelebrated && winningPlayers.length > 0) {
-      setWinnerEmoji(winningPlayers[0].emoji || '🏆');
-      setShowCelebration(true);
-      setHasCelebrated(true);
-      setTimeout(() => setShowCelebration(false), 4500);
+      const celebrationStart = setTimeout(() => {
+        setWinnerEmoji(winningPlayers[0].emoji || '🏆');
+        setShowCelebration(true);
+        setHasCelebrated(true);
+      }, 0);
+      const celebrationEnd = setTimeout(() => setShowCelebration(false), 4500);
+
+      return () => {
+        clearTimeout(celebrationStart);
+        clearTimeout(celebrationEnd);
+      };
     }
   }, [isGameComplete, hasCelebrated, winningPlayers, setHasCelebrated]);
 
-  const rainDrops = useMemo(() => Array.from({ length: 36 }).map((_, i) => ({
-    id: i,
-    emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
-    left: `${Math.random() * 100}%`,
-    animationDuration: `${Math.random() * 2 + 2}s`,
-    animationDelay: `${Math.random() * 2}s`
-  })), [winnerEmoji]);
+  const rainDrops = useMemo(() => {
+    const emojiSeed = winnerEmoji.codePointAt(0) || 0;
+    return Array.from({ length: 36 }).map((_, i) => {
+      const base = emojiSeed + i * 23;
+      return {
+        id: i,
+        emoji: i % 3 === 0 ? winnerEmoji : (i % 2 === 0 ? '🏆' : '🎉'),
+        left: `${(pseudoRandom(base) * 100).toFixed(2)}%`,
+        animationDuration: `${(pseudoRandom(base + 1) * 2 + 2).toFixed(2)}s`,
+        animationDelay: `${(pseudoRandom(base + 2) * 2).toFixed(2)}s`
+      };
+    });
+  }, [winnerEmoji]);
 
   const setWinCondition = (nextCondition: 'target' | 'rounds') => {
     setSettings((prev) => {
@@ -626,7 +647,7 @@ export default function FarklePage() {
                             <div className="flex flex-col items-center gap-1">
                               <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
                                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
-                                  <img src={player.photoURL} alt={player.name} referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" />
+                                  <Image src={player.photoURL} alt={player.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" />
                                 ) : (
                                   <span>{player.emoji || '👤'}</span>
                                 )}

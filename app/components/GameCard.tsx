@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { formatFirstName } from '../../lib/cloudPlayers';
 
@@ -20,7 +21,6 @@ type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 type FarkleMode = 'regular' | 'stealing';
 type FarkleScoreMap = Record<string, Record<string, number | null>>;
 type FarkleSettings = { targetScore: number; roundCount: number | null };
-type StandingsPlayer = PlayerSnapshot & { score: number };
 
 export type GameRecord = {
   gameId: string;
@@ -40,12 +40,16 @@ export type GameRecord = {
 
 type GameCardProps = {
   game: GameRecord;
+  winnerIds: string[];
+  isComplete: boolean;
+  canFinish: boolean;
   isExpanded: boolean;
   onToggle: () => void;
   onDelete: (gameId: string) => void;
+  onFinish: () => void;
 };
 
-export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameCardProps) {
+export default function GameCard({ game, winnerIds, isComplete, canFinish, isExpanded, onToggle, onDelete, onFinish }: GameCardProps) {
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<'STANDINGS' | 'GRID' | 'GRAPH'>('STANDINGS');
@@ -156,8 +160,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
     setShowDeleteConfirm(false);
   };
 
-  const bestScore = standings[0]?.score;
-  const winners = standings.filter(s => s.score === bestScore);
+  const winners = standings.filter((standing) => winnerIds.includes(standing.id));
   const winnerNames = winners.map(w => `${w.emoji} ${displayPlayerName(w)}`).join(', ');
 
   const formattedDate = (() => {
@@ -191,20 +194,27 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
             <h3 className="font-black text-slate-800 dark:text-white text-lg">{game.gameName}</h3>
             <p className="text-xs font-bold text-slate-400">{formattedDate}</p>
           </div>
-          <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-right">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Winner</p>
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
-              {winnerNames || 'Draw'}
-            </p>
-          </div>
+          {isComplete ? (
+            <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-right">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Winner</p>
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
+                {winnerNames || 'Draw'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg text-right border border-amber-200 dark:border-amber-900/40">
+              <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-0.5">Status</p>
+              <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Incomplete</p>
+            </div>
+          )}
         </div>
         
         {/* ADDED PLAYER NAMES TO COLLAPSED PILLS */}
         <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto scrollbar-hide">
           {standings.map(p => (
-            <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold whitespace-nowrap ${winners.some(w => w.id === p.id) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+            <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold whitespace-nowrap ${isComplete && winners.some(w => w.id === p.id) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
               <span className="text-sm w-5 h-5 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={20} height={20} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</span>
@@ -224,6 +234,11 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
             <button onClick={handleResume} className="flex-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold py-2 rounded-xl text-sm transition-all active:scale-95">
               ✏️ Edit Game
             </button>
+            {canFinish && (
+              <button onClick={onFinish} className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
+                ✅ Finish & Close
+              </button>
+            )}
             <button onClick={handleShare} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
               📤 Share
             </button>
@@ -253,7 +268,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                   <div className="flex items-center gap-3">
                     <span className={`font-black w-4 text-center ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 dark:text-slate-600'}`}>{i + 1}</span>
                     <span className="text-xl w-7 h-7 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</span>
@@ -274,7 +289,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                     {standings.map(p => (
                       <th key={p.id} className="p-2 border-b border-slate-200 dark:border-slate-700">
                         <div className="text-lg w-7 h-7 flex items-center justify-center overflow-hidden mx-auto">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <img src={p.photoURL} alt={p.name} className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
   <span>{p.emoji || '👤'}</span>
 )}</div>
@@ -299,7 +314,7 @@ export default function GameCard({ game, isExpanded, onToggle, onDelete }: GameC
                   <tr>
                     <td className="p-2 font-black text-slate-400 uppercase text-[10px] border-r border-slate-200 dark:border-slate-700">Tot</td>
                     {standings.map(p => (
-                      <td key={p.id} className={`p-2 font-black text-lg ${p.score === bestScore ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                      <td key={p.id} className={`p-2 font-black text-lg ${isComplete && winners.some((winner) => winner.id === p.id) ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
                         {p.score}
                       </td>
                     ))}

@@ -1,18 +1,20 @@
 // app/roster/[playerId]/page.tsx
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { deleteDoc, doc, getDoc, collection, getDocs, updateDoc, query, where, writeBatch } from 'firebase/firestore';
 import { fetchCloudPlayersWithLegacy, formatFirstName } from '../../../lib/cloudPlayers';
 import { db } from '../../../lib/firebase';
+import { getWinnerIdsForRecord, isGameCompleted } from '../../../lib/gameHistory';
 import { useGameState } from '../../../hooks/useGameState';
 import { useAuth } from '../../../hooks/useAuth';
 import BottomNav from '../../components/BottomNav';
 import GameCard, { GameRecord } from '../../components/GameCard';
 
 // --- Types ---
-type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean; isCloudUser?: boolean };
+type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean; isCloudUser?: boolean; useCustomEmoji?: boolean };
 type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
@@ -43,6 +45,7 @@ export default function PlayerProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editEmoji, setEditEmoji] = useState('');
+  const [editUseCustomEmoji, setEditUseCustomEmoji] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -88,13 +91,6 @@ export default function PlayerProfilePage() {
     return null;
   }, [cloudPlayer, localPlayers, playerId]);
 
-  useEffect(() => {
-    if (player && !isEditing) {
-      setEditName(player.name);
-      setEditEmoji(player.emoji || '👤');
-    }
-  }, [player, isEditing]);
-
   const allHistory = useMemo(() => {
     const localMatches = localHistory.filter(h => h.activePlayerIds.includes(playerId));
     const combined = [...localMatches, ...cloudHistory];
@@ -110,35 +106,51 @@ export default function PlayerProfilePage() {
     return allHistory.filter(g => g.gameName === filterGame);
   }, [allHistory, filterGame]);
 
+  const getScoreDirectionForGame = useCallback((game: GameRecord): 'UP' | 'DOWN' => {
+    if (game.settings?.scoreDirection) {
+      return game.settings.scoreDirection;
+    }
+
+    const profile = gameProfiles.find((entry) => entry.name === game.gameName);
+    if (profile?.scoreDirection) {
+      return profile.scoreDirection;
+    }
+
+    return profile?.winCondition === 'LOW' ? 'DOWN' : 'UP';
+  }, [gameProfiles]);
+
   const stats = useMemo(() => {
     let wins = 0;
     let lastPlaces = 0;
     const scoresForGraph: number[] = [];
 
     filteredGames.forEach(game => {
-      const profile = gameProfiles.find(p => p.name === game.gameName) || gameProfiles[0];
-      const winCondition = profile.winCondition;
       const playerScore = game.finalScores[playerId];
+      const completed = isGameCompleted(game);
+      const scoreDirection = getScoreDirectionForGame(game);
       
       if (playerScore !== undefined) scoresForGraph.push(playerScore);
 
-      let winningScore = winCondition === 'HIGH' ? -Infinity : Infinity;
-      let losingScore = winCondition === 'HIGH' ? Infinity : -Infinity;
+      if (!completed) {
+        return;
+      }
+
+      const winners = getWinnerIdsForRecord(game, scoreDirection);
+
+      let losingScore = scoreDirection === 'UP' ? Infinity : -Infinity;
       
       game.activePlayerIds.forEach(pid => {
         const score = game.finalScores[pid];
         if (score !== undefined) {
-          if (winCondition === 'HIGH') {
-            if (score > winningScore) winningScore = score;
+          if (scoreDirection === 'UP') {
             if (score < losingScore) losingScore = score;
           } else {
-            if (score < winningScore) winningScore = score;
             if (score > losingScore) losingScore = score;
           }
         }
       });
 
-      if (playerScore === winningScore) wins += 1;
+      if (winners.includes(playerId)) wins += 1;
       if (playerScore === losingScore && game.activePlayerIds.length > 1) lastPlaces += 1;
     });
 
@@ -148,13 +160,21 @@ export default function PlayerProfilePage() {
       lastPlaces,
       graphData: scoresForGraph.reverse() 
     };
-  }, [filteredGames, gameProfiles, playerId]);
+  }, [filteredGames, getScoreDirectionForGame, playerId]);
 
   const width = 400; const height = 120;
   const max = Math.max(...stats.graphData, 10); const min = Math.min(...stats.graphData, 0); const range = max - min || 1;
 
   // Handlers
-const handleEditClick = () => setIsEditing(true);
+const handleEditClick = useCallback(() => {
+  if (player) {
+    setEditName(player.name);
+    setEditEmoji(player.emoji || '👤');
+    setEditUseCustomEmoji(Boolean(player.useCustomEmoji) || !player.photoURL);
+  }
+
+  setIsEditing(true);
+}, [player]);
 
 const handleSave = async () => {
   if (!player) return;
@@ -170,7 +190,8 @@ const handleSave = async () => {
       const userRef = doc(db, 'users', player.id);
       await updateDoc(userRef, {
         name: editName,
-        emoji: editEmoji,
+        emoji: editUseCustomEmoji ? (editEmoji || player.emoji || '👤') : (player.emoji || '👤'),
+        useCustomEmoji: editUseCustomEmoji,
       });
       setIsEditing(false);
     } catch (error) {
@@ -178,7 +199,7 @@ const handleSave = async () => {
     }
   } else {
     // 2. Original local save logic for Guest/Local players
-    setLocalPlayers(prev => prev.map(p => p.id === player.id ? { ...p, name: editName, emoji: editEmoji } : p));
+    setLocalPlayers(prev => prev.map(p => p.id === player.id ? { ...p, name: editName, emoji: editEmoji || p.emoji || '👤', useCustomEmoji: editUseCustomEmoji } : p));
     setIsEditing(false);
   }
 };
@@ -335,7 +356,7 @@ const handleDelete = async () => {
           <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Admin Merge</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-              Move all of <b>{player.isCloudUser ? formatFirstName(player.name) : player.name}'s</b> history into a synced Cloud Account. This cannot be undone.
+              Move all of <b>{player.isCloudUser ? formatFirstName(player.name) : player.name}&apos;s</b> history into a synced Cloud Account. This cannot be undone.
             </p>
             
             <select 
@@ -424,12 +445,16 @@ const handleDelete = async () => {
                 onClick={() => setShowEmojiPicker(true)}
                 className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 border-dashed rounded-full flex items-center justify-center text-4xl active:scale-95 transition shadow-inner relative"
               >
-                {editEmoji}
+                {(!editUseCustomEmoji && player.photoURL) ? (
+                  <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
+                ) : (
+                  <>{editEmoji || '👤'}</>
+                )}
                 <div className="absolute -bottom-1 bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Tap</div>
               </button>
             ) : (
-              player.photoURL ? (
-                <img src={player.photoURL} alt={player.name} className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
+              player.photoURL && !player.useCustomEmoji ? (
+                <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
               ) : (
                 <div className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full flex items-center justify-center text-4xl shadow-sm dark:shadow-none">
                   {player.emoji}
@@ -510,9 +535,13 @@ const handleDelete = async () => {
               <GameCard 
                 key={`${game.gameId}-${index}`}
                 game={game} 
+                winnerIds={isGameCompleted(game) ? getWinnerIdsForRecord(game, getScoreDirectionForGame(game)) : []}
+                isComplete={isGameCompleted(game)}
+                canFinish={false}
                 isExpanded={expandedGameId === game.gameId}
                 onToggle={() => setExpandedGameId(prev => prev === game.gameId ? null : game.gameId)}
                 onDelete={handleDeleteGame}
+                onFinish={() => undefined}
               />
             ))
           )}
@@ -532,7 +561,7 @@ const handleDelete = async () => {
                   {player.isCloudUser && player.photoURL && (
                     <button 
                       onClick={() => {
-                        setEditEmoji(''); // Clear the emoji
+                        setEditUseCustomEmoji(false);
                         setShowEmojiPicker(false); // Close the modal
                       }}
                       className="w-full mb-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold rounded-xl flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-800 transition-all active:scale-95"
@@ -545,7 +574,7 @@ const handleDelete = async () => {
                     {EMOJIS.map(emoji => (
                       <button 
                         key={emoji} 
-                        onClick={() => { setEditEmoji(emoji); setShowEmojiPicker(false); }}
+                        onClick={() => { setEditEmoji(emoji); setEditUseCustomEmoji(true); setShowEmojiPicker(false); }}
                         className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
                       >
                         {emoji}
