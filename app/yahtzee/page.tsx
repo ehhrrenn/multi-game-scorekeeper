@@ -14,6 +14,7 @@ import BottomNav from '../components/BottomNav';
 import { useActiveSession } from '../../hooks/useActiveSession';
 import PlayerSetupPanel from '../components/PlayerSetupPanel';
 import ScoreEntrySheet from '../components/ScoreEntrySheet';
+import DiceRollerSheet from '../components/DiceRollerSheet';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
@@ -66,6 +67,7 @@ export default function YahtzeePage() {
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('');
   const [gridEditVersion, setGridEditVersion] = useState(0);
+  const [showDiceRoller, setShowDiceRoller] = useState(false);
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
   const totalGridColumns = 1 + players.length * columnsPerPlayer;
 
@@ -438,7 +440,10 @@ export default function YahtzeePage() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[300px] font-sans text-slate-800 dark:text-slate-200">
         <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
           <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee'}</h1>
-          <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowDiceRoller(true)} className="h-9 px-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-sm font-bold active:scale-95 transition gap-1">🎲 <span className="hidden sm:inline">Roll</span></button>
+            <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+          </div>
         </div>
 
         <main className="max-w-screen-md mx-auto px-4 pt-16">
@@ -786,6 +791,12 @@ export default function YahtzeePage() {
           </div>
         </div>
       )}
+
+        <DiceRollerSheet
+          open={showDiceRoller}
+          onClose={() => setShowDiceRoller(false)}
+          gameType="yahtzee"
+        />
 
         <BottomNav />
       </div>

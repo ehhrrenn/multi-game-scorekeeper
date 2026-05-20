@@ -211,3 +211,25 @@ export function getFarkleTurnValidationMessage(total: number, baseScore = 0): st
 
   return null;
 }
+
+function diceToCounts(dice: number[]): number[] {
+  const counts = [0, 0, 0, 0, 0, 0];
+  dice.forEach((d) => {
+    if (d >= 1 && d <= 6) counts[d - 1]++;
+  });
+  return counts;
+}
+
+/** Returns the maximum possible score for a given set of dice values. */
+export function scoreDice(dice: number[]): number {
+  if (dice.length === 0) return 0;
+  const counts = diceToCounts(dice);
+  const cache = new Map<string, Set<number>>();
+  const scores = collectScores(counts, cache);
+  return Math.max(...scores);
+}
+
+/** Returns true if the given dice contain at least one scoring combination. */
+export function hasAnyScoringDice(dice: number[]): boolean {
+  return scoreDice(dice) > 0;
+}
