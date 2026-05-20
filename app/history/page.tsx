@@ -19,7 +19,6 @@ import GameCard from '../components/GameCard';
 
 // --- Types ---
 type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string; isCloudUser?: boolean; useCustomEmoji?: boolean };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection?: 'UP' | 'DOWN' };
 
 type HeroStat = { wins: number; played: number; name: string; emoji: string; photoURL?: string };
 type HeroStatWithPct = HeroStat & { pct: number };
@@ -39,7 +38,6 @@ export default function HistoryPage() {
 
   // 2. Local State (Legacy Fallback)
   const [localHistory, setLocalHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
-  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH' }]);
   
   // --- Filters & Toggles ---
   const [selectedGame, setSelectedGame] = useState<string>('ALL');
@@ -107,13 +105,12 @@ export default function HistoryPage() {
       return game.settings.scoreDirection;
     }
 
-    const profile = gameProfiles.find((entry) => entry.name === game.gameName);
-    if (profile?.scoreDirection) {
-      return profile.scoreDirection;
+    if (game.winCondition === 'LOW') {
+      return 'DOWN';
     }
 
-    return profile?.winCondition === 'LOW' ? 'DOWN' : 'UP';
-  }, [gameProfiles]);
+    return 'UP';
+  }, []);
 
   const getWinnerIds = useCallback((game: GameRecord) => {
     if (!isGameCompleted(game)) {

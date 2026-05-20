@@ -15,7 +15,6 @@ import GameCard, { GameRecord } from '../../components/GameCard';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean; isCloudUser?: boolean; useCustomEmoji?: boolean };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 
 const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
 
@@ -35,7 +34,6 @@ export default function PlayerProfilePage() {
 
   const [localPlayers, setLocalPlayers] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [localHistory, setLocalHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
-  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
 
   // 2. UI State
   const [filterGame, setFilterGame] = useState<string>('ALL');
@@ -111,13 +109,12 @@ export default function PlayerProfilePage() {
       return game.settings.scoreDirection;
     }
 
-    const profile = gameProfiles.find((entry) => entry.name === game.gameName);
-    if (profile?.scoreDirection) {
-      return profile.scoreDirection;
+    if (game.winCondition === 'LOW') {
+      return 'DOWN';
     }
 
-    return profile?.winCondition === 'LOW' ? 'DOWN' : 'UP';
-  }, [gameProfiles]);
+    return 'UP';
+  }, []);
 
   const stats = useMemo(() => {
     let wins = 0;

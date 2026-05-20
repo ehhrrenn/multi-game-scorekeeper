@@ -18,7 +18,7 @@ import ScoreEntrySheet from '../components/ScoreEntrySheet';
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
+type GameProfile = { name: string };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 
 // --- Helpers ---
@@ -57,8 +57,9 @@ function CustomTrackerContent() {
   const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0, scoreDirection: 'UP' });
-  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
+  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game' }]);
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
+  const [sessionWinCondition, setSessionWinCondition] = useGameState<'HIGH' | 'LOW'>('scorekeeper_session_win_condition', 'HIGH');
   
   const [activeGameId, setActiveGameId] = useGameState<string | null>('scorekeeper_active_game_id', null);
   const [hasCelebrated, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
@@ -96,7 +97,7 @@ function CustomTrackerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const gameIdFromUrl = searchParams?.get('gameId');
-  const activeProfile = gameProfiles.find(p => p.name === activeGameName) || gameProfiles[0];
+  const currentWinCondition = sessionWinCondition;
   const { activeSession, saveSession, clearSession } = useActiveSession();
   const currentSessionId = activeSession?.gameType === 'custom' ? activeSession.sessionId : undefined;
   
@@ -148,8 +149,13 @@ const allAvailablePlayers = useMemo(() => {
       ) {
         setSettings(nextSettings);
       }
+
+      const nextWinCondition = lastPlayedOfThisType?.winCondition || 'HIGH';
+      if (sessionWinCondition !== nextWinCondition) {
+        setSessionWinCondition(nextWinCondition);
+      }
     }
-  }, [activeGameName, gameHistory, isGameStarted, settings, viewMode, setSettings]);
+  }, [activeGameName, gameHistory, isGameStarted, sessionWinCondition, settings, setSessionWinCondition, viewMode, setSettings]);
 
   // Load game from URL parameter for editing
   useEffect(() => {
@@ -158,7 +164,19 @@ const allAvailablePlayers = useMemo(() => {
       return;
     }
 
-    const gameToLoad = gameHistory.find(g => g.gameId === id);
+    let gameToLoad = gameHistory.find(g => g.gameId === id);
+    if (!gameToLoad && typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem('scorekeeper_edit_game_record');
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed?.gameId === id) {
+          gameToLoad = parsed as GameRecord;
+        }
+      } catch {
+        // Ignore malformed handoff payload.
+      }
+    }
+
     if (!gameToLoad) {
       return;
     }
@@ -186,10 +204,11 @@ const allAvailablePlayers = useMemo(() => {
     if (gameToLoad.settings) {
       setSettings(gameToLoad.settings);
     }
+    setSessionWinCondition(gameToLoad.winCondition || 'HIGH');
 
     // Switch to grid view for editing
     setViewMode('GRID');
-  }, [gameIdFromUrl || '']);
+  }, [gameHistory, gameIdFromUrl, setActiveGameId, setActiveGameName, setPlayers, setRounds, setSessionWinCondition, setSettings]);
 
   useEffect(() => {
     if (!players.length) {
@@ -199,10 +218,10 @@ const allAvailablePlayers = useMemo(() => {
     saveSession(
       'custom',
       players.filter((player) => player?.id).map((player) => player.id),
-      { players, rounds, activeGameName, settings, activeGameId },
+      { players, rounds, activeGameName, settings, activeGameId, winCondition: currentWinCondition },
       currentSessionId
     );
-  }, [activeGameId, activeGameName, currentSessionId, players, rounds, saveSession, settings]);
+  }, [activeGameId, activeGameName, currentSessionId, currentWinCondition, players, rounds, saveSession, settings]);
 
   const calculateTotal = useCallback((pId: string) => {
     const sum = rounds.reduce((total, r) => total + (r.scores[pId] || 0), 0);
@@ -223,23 +242,36 @@ const allAvailablePlayers = useMemo(() => {
     
     let over = false;
     let winnerId: string | null = null;
-    let bestScore = settings.scoreDirection === 'DOWN' ? Infinity : -Infinity;
+    let bestScore = currentWinCondition === 'LOW' ? Infinity : -Infinity;
 
     players.forEach(p => {
       const total = calculateTotal(p.id);
       if (settings.scoreDirection === 'UP' && total >= settings.target) {
         over = true;
-        if (total > bestScore) { bestScore = total; winnerId = p.id; }
+        if (currentWinCondition === 'LOW') {
+          if (total < bestScore) { bestScore = total; winnerId = p.id; }
+        } else if (total > bestScore) { bestScore = total; winnerId = p.id; }
       }
       if (settings.scoreDirection === 'DOWN' && total <= 0) {
         over = true;
-        if (total < bestScore) { bestScore = total; winnerId = p.id; }
+        if (currentWinCondition === 'LOW') {
+          if (total < bestScore) { bestScore = total; winnerId = p.id; }
+        } else if (total > bestScore) { bestScore = total; winnerId = p.id; }
       }
     });
 
     const winningPlayer = players.find(p => p.id === winnerId);
     return { isGameOver: over, currentWinner: winningPlayer };
-  }, [calculateTotal, isRoundComplete, players, settings.scoreDirection, settings.target]);
+  }, [calculateTotal, currentWinCondition, isRoundComplete, players, settings.scoreDirection, settings.target]);
+
+  const leadingScore = useMemo(() => {
+    if (validPlayers.length === 0) {
+      return null;
+    }
+
+    const totals = validPlayers.map((player) => calculateTotal(player.id));
+    return currentWinCondition === 'LOW' ? Math.min(...totals) : Math.max(...totals);
+  }, [calculateTotal, currentWinCondition, validPlayers]);
 
   useEffect(() => {
     if (validPlayers.length === 0 || rounds.length === 0 || isGameOver || !isRoundComplete) {
@@ -285,7 +317,7 @@ const allAvailablePlayers = useMemo(() => {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
     if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameProfiles([{ name: trimmed, winCondition: 'HIGH', scoreDirection: 'UP' }, ...gameProfiles]);
+      setGameProfiles([{ name: trimmed }, ...gameProfiles]);
     }
     setActiveGameName(trimmed);
     setNewGameInput('');
@@ -302,22 +334,11 @@ const allAvailablePlayers = useMemo(() => {
     setIsEditingGameName(false);
   };
 
-  const updateProfileRule = (updates: Partial<GameProfile>) => {
-    setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, ...updates } : p));
-
-    if (updates.winCondition === 'LOW') {
-      setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' }));
-    }
-
-    if (updates.winCondition === 'HIGH') {
-      setSettings((prev) => ({ ...prev, scoreDirection: 'UP' }));
-    }
-  };
-
   const clearSetup = () => {
     setPlayers([]);
     setRounds([{ roundId: 1, scores: {} }]);
     setActiveGameName('Custom Game');
+    setSessionWinCondition('HIGH');
     setSettings({ target: 0, scoreDirection: 'UP' });
     setActiveCell(null);
     setInputValue('0');
@@ -420,7 +441,7 @@ const allAvailablePlayers = useMemo(() => {
       activeGameName,
       settings,
       activeGameId: gameIdToUse,
-      winCondition: activeProfile.winCondition
+      winCondition: currentWinCondition
     }, gameIdToUse);
 
     if (!newGame) {
@@ -428,6 +449,11 @@ const allAvailablePlayers = useMemo(() => {
     }
 
     setGameHistory(prev => upsertGameRecord(prev, newGame));
+    if (db) {
+      saveGameRecordToCloud(db, newGame).catch((error) => {
+        console.error('Error saving custom game to cloud:', error);
+      });
+    }
     
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2000);
@@ -437,7 +463,7 @@ const allAvailablePlayers = useMemo(() => {
     const sortedPlayers = [...validPlayers].sort((a, b) => {
       const aTotal = calculateTotal(a.id);
       const bTotal = calculateTotal(b.id);
-      return activeProfile?.winCondition === 'LOW' ? aTotal - bTotal : bTotal - aTotal;
+      return currentWinCondition === 'LOW' ? aTotal - bTotal : bTotal - aTotal;
     });
     const scoreLines = sortedPlayers.map((p, i) => `${i + 1}. ${p.emoji} ${p.isCloudUser ? formatFirstName(p.name) : p.name}: ${calculateTotal(p.id)}`);
     const shareText = `🏆 ${activeGameName}\n${scoreLines.join('\n')}`;
@@ -453,18 +479,22 @@ const allAvailablePlayers = useMemo(() => {
     if (viewMode !== 'GRID' || gridEditVersion === 0) return;
     const timer = setTimeout(() => {
       const gameIdToUse = activeGameId || `game_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      const winCondition = (gameProfiles.find((p) => p.name === activeGameName) || gameProfiles[0])?.winCondition;
       const gameRecord = buildCustomGameRecord({
         players, rounds, activeGameName, settings,
-        activeGameId: gameIdToUse, winCondition
+        activeGameId: gameIdToUse, winCondition: currentWinCondition
       }, gameIdToUse);
       if (gameRecord) {
         if (!activeGameId) setActiveGameId(gameIdToUse);
         setGameHistory(prev => upsertGameRecord(prev, gameRecord));
+        if (db) {
+          saveGameRecordToCloud(db, gameRecord).catch((error) => {
+            console.error('Error autosaving custom game to cloud:', error);
+          });
+        }
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [activeGameId, activeGameName, gameProfiles, gridEditVersion, players, rounds, setActiveGameId, setGameHistory, settings, viewMode]);
+  }, [activeGameId, activeGameName, currentWinCondition, gridEditVersion, players, rounds, setActiveGameId, setGameHistory, settings, viewMode]);
 
   const handleStartNewGame = async () => {
     // Detect if we're editing an existing game (activeGameId exists in gameHistory)
@@ -477,7 +507,7 @@ const allAvailablePlayers = useMemo(() => {
       activeGameName,
       settings,
       activeGameId: gameIdForRecord,
-      winCondition: activeProfile.winCondition
+      winCondition: currentWinCondition
     }, gameIdForRecord, {
       markCompleted: true,
       completedReason: isGameOver ? 'TARGET_REACHED' : 'MANUAL_FINISH'
@@ -549,7 +579,7 @@ const allAvailablePlayers = useMemo(() => {
       activeGameName,
       settings,
       activeGameId: gameIdForRecord,
-      winCondition: activeProfile.winCondition
+      winCondition: currentWinCondition
     }, gameIdForRecord, {
       markCompleted: true,
       completedReason: isGameOver ? 'TARGET_REACHED' : 'MANUAL_FINISH'
@@ -633,7 +663,7 @@ const allAvailablePlayers = useMemo(() => {
       };
     });
   }, [winnerEmoji]);
-  const gridWinConditionLabel = activeProfile?.winCondition === 'LOW' ? 'Lowest total wins' : 'Highest total wins';
+  const gridWinConditionLabel = currentWinCondition === 'LOW' ? 'Lowest total wins' : 'Highest total wins';
   
   const gridEndLabel = settings.endMode === 'ROUNDS' && settings.roundLimit
     ? `Play to ${settings.roundLimit} round${settings.roundLimit === 1 ? '' : 's'}`
@@ -738,10 +768,10 @@ const allAvailablePlayers = useMemo(() => {
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
             <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
               <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Global Rule: Win Condition</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Win Condition</label>
                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                  <button onClick={() => updateProfileRule({ winCondition: 'HIGH' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
-                  <button onClick={() => updateProfileRule({ winCondition: 'LOW' })} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeProfile.winCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
+                  <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
+                  <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
                 </div>
               </div>
 
@@ -932,13 +962,9 @@ const allAvailablePlayers = useMemo(() => {
                         <td className="w-16 p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 text-center sticky left-0 z-10 bg-slate-800 dark:bg-slate-900">Tot</td>
                         {validPlayers.map((p) => {
                           const total = calculateTotal(p.id);
-                          let isWinner = false;
-                          if (settings.target > 0) {
-                            if (settings.scoreDirection === 'UP' && total >= settings.target) isWinner = true;
-                            if (settings.scoreDirection === 'DOWN' && total <= 0) isWinner = true;
-                          }
+                          const isWinner = isRoundComplete && leadingScore !== null && total === leadingScore;
                           return (
-                            <td key={p.id} className={`w-28 p-4 font-black text-xl text-center ${isWinner && isRoundComplete ? 'text-green-400' : ''}`}>
+                            <td key={p.id} className={`w-28 p-4 font-black text-xl text-center ${isWinner ? 'text-green-400' : ''}`}>
                               {total}
                             </td>
                           );

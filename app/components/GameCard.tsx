@@ -134,7 +134,8 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
       return;
     }
 
-    // For custom games, use query parameter for loading
+    // For custom games, include a direct handoff record so edit works even when local history hydrates late.
+    window.localStorage.setItem('scorekeeper_edit_game_record', JSON.stringify(game));
     router.push(`/custom?gameId=${game.gameId}`);
   };
 
