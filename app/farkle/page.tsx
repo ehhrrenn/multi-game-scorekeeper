@@ -55,6 +55,7 @@ export default function FarklePage() {
   const [activeEmojiPicker, setActiveEmojiPicker] = useState<string | null>(null);
   const [activeCell, setActiveCell] = useState<ActiveCell>(null);
   const [stealOfferCell, setStealOfferCell] = useState<ActiveCell>(null);
+  const [chasePromptCell, setChasePromptCell] = useState<ActiveCell>(null);
   const [inputValue, setInputValue] = useState('0');
   const [acceptedStolenScore, setAcceptedStolenScore] = useState<number | null>(null);
   const [entryMode, setEntryMode] = useState<'quick' | 'full'>('quick');
@@ -151,13 +152,26 @@ export default function FarklePage() {
     return roundIndex;
   }, [getRoundScore, players]);
 
-  const targetReachedRoundIndex = useMemo(() => {
-    if (settings.targetScore <= 0 || players.length === 0) {
-      return null;
+  const targetChaseState = useMemo(() => {
+    const totals: Record<string, number> = Object.fromEntries(players.map((player) => [player.id, 0]));
+
+    if (settings.roundCount !== null || settings.targetScore <= 0 || players.length === 0) {
+      return {
+        chaseActive: false,
+        chaseComplete: false,
+        leaderId: null as string | null,
+        scoreToBeat: 0,
+        totals,
+        pointsNeededToPassForCurrentPlayer: null as number | null
+      };
     }
 
-    const runningTotals: Record<string, number> = Object.fromEntries(players.map((player) => [player.id, 0]));
     const maxRound = Math.max(highestSavedRoundIndex, currentRoundIndex);
+    let chaseActive = false;
+    let chaseComplete = false;
+    let leaderId: string | null = null;
+    let scoreToBeat = 0;
+    let failedAttemptsSinceLeader = 0;
 
     for (let roundIndex = 0; roundIndex <= maxRound; roundIndex += 1) {
       for (const player of players) {
@@ -166,22 +180,74 @@ export default function FarklePage() {
           continue;
         }
 
-        runningTotals[player.id] += score;
-        if (runningTotals[player.id] >= settings.targetScore) {
-          return roundIndex;
+        totals[player.id] += score;
+
+        if (!chaseActive) {
+          const anyReachedTarget = Object.values(totals).some((value) => value >= settings.targetScore);
+          if (!anyReachedTarget) {
+            continue;
+          }
+
+          chaseActive = true;
+          let nextLeaderId: string | null = null;
+          let nextScoreToBeat = -Infinity;
+          for (const contender of players) {
+            const contenderTotal = totals[contender.id] || 0;
+            if (contenderTotal > nextScoreToBeat) {
+              nextScoreToBeat = contenderTotal;
+              nextLeaderId = contender.id;
+            }
+          }
+
+          leaderId = nextLeaderId;
+          scoreToBeat = Math.max(0, nextScoreToBeat);
+          failedAttemptsSinceLeader = 0;
+          continue;
+        }
+
+        if (chaseComplete || !leaderId || player.id === leaderId) {
+          continue;
+        }
+
+        const challengerTotal = totals[player.id] || 0;
+        if (challengerTotal > scoreToBeat) {
+          leaderId = player.id;
+          scoreToBeat = challengerTotal;
+          failedAttemptsSinceLeader = 0;
+        } else {
+          failedAttemptsSinceLeader += 1;
+          if (failedAttemptsSinceLeader >= players.length - 1) {
+            chaseComplete = true;
+          }
         }
       }
     }
 
-    return null;
-  }, [currentRoundIndex, getRoundScore, highestSavedRoundIndex, players, settings.targetScore]);
+    if (chaseActive && players.length === 1) {
+      chaseComplete = true;
+    }
 
-  const targetReached = targetReachedRoundIndex !== null;
+    const currentPlayerId = players[currentPlayerIndex]?.id || null;
+    const currentPlayerTotal = currentPlayerId ? totals[currentPlayerId] || 0 : 0;
+    const pointsNeededToPassForCurrentPlayer =
+      chaseActive && !chaseComplete && currentPlayerId && leaderId && currentPlayerId !== leaderId
+        ? Math.max(1, scoreToBeat - currentPlayerTotal + 1)
+        : null;
+
+    return {
+      chaseActive,
+      chaseComplete,
+      leaderId,
+      scoreToBeat,
+      totals,
+      pointsNeededToPassForCurrentPlayer
+    };
+  }, [currentPlayerIndex, currentRoundIndex, getRoundScore, highestSavedRoundIndex, players, settings.roundCount, settings.targetScore]);
+
   const roundLimitReached = settings.roundCount !== null && completedRoundCount >= settings.roundCount;
   const usesRoundWinCondition = settings.roundCount !== null;
   const activeWinCondition: 'target' | 'rounds' = usesRoundWinCondition ? 'rounds' : 'target';
-  const finalRoundCompletedForTarget = targetReachedRoundIndex !== null && completedRoundCount >= targetReachedRoundIndex + 1;
-  const isGameComplete = players.length > 0 && (usesRoundWinCondition ? roundLimitReached : finalRoundCompletedForTarget);
+  const isGameComplete = players.length > 0 && (usesRoundWinCondition ? roundLimitReached : targetChaseState.chaseComplete);
   const currentPlayer = players[currentPlayerIndex] || null;
   const highestTotal = players.length ? Math.max(...players.map((player) => totalScores[player.id] || 0)) : 0;
   const winningPlayers = useMemo(
@@ -264,6 +330,7 @@ export default function FarklePage() {
     setPhase('SETUP');
     setActiveCell(null);
     setStealOfferCell(null);
+    setChasePromptCell(null);
     setInputValue('0');
     setAcceptedStolenScore(null);
     setEntryMode('quick');
@@ -440,14 +507,32 @@ export default function FarklePage() {
   const openScoreEntry = (roundIndex: number, playerId: string) => {
     const existingValue = getRoundScore(playerId, roundIndex);
     const currentTurn = isCurrentTurnCell(roundIndex, playerId);
+    const shouldShowChasePrompt =
+      currentTurn
+      && targetChaseState.chaseActive
+      && !targetChaseState.chaseComplete
+      && targetChaseState.leaderId !== null
+      && playerId !== targetChaseState.leaderId;
+    let shouldShowStealPrompt = false;
 
-    if (currentTurn && mode === 'stealing' && currentPlayerIndex > 0 && existingValue === null) {
-      const previousPlayer = players[currentPlayerIndex - 1];
-      const previousScore = previousPlayer ? getRoundScore(previousPlayer.id, roundIndex) : null;
+    if (currentTurn && mode === 'stealing' && existingValue === null) {
+      const sourcePlayerIndex = currentPlayerIndex > 0 ? currentPlayerIndex - 1 : players.length - 1;
+      const sourceRoundIndex = currentPlayerIndex > 0 ? roundIndex : roundIndex - 1;
+      const sourcePlayer = players[sourcePlayerIndex];
+      const previousScore = sourcePlayer && sourceRoundIndex >= 0 ? getRoundScore(sourcePlayer.id, sourceRoundIndex) : null;
       if (previousScore !== null && previousScore > 0) {
-        setStealOfferCell({ roundIndex, playerId });
-        return;
+        shouldShowStealPrompt = true;
       }
+    }
+
+    if ((shouldShowStealPrompt || shouldShowChasePrompt) && existingValue === null) {
+      if (shouldShowStealPrompt) {
+        setStealOfferCell({ roundIndex, playerId });
+      }
+      if (shouldShowChasePrompt) {
+        setChasePromptCell({ roundIndex, playerId });
+      }
+      return;
     }
 
     setAcceptedStolenScore(null);
@@ -456,20 +541,51 @@ export default function FarklePage() {
     setEntryMode(existingValue !== null ? 'full' : 'quick');
   };
 
+  const getStealOfferSource = (offerCell: NonNullable<ActiveCell>) => {
+    if (!players.length) {
+      return null;
+    }
+
+    const sourcePlayerIndex = currentPlayerIndex > 0 ? currentPlayerIndex - 1 : players.length - 1;
+    const sourceRoundIndex = currentPlayerIndex > 0 ? offerCell.roundIndex : offerCell.roundIndex - 1;
+
+    if (sourceRoundIndex < 0) {
+      return null;
+    }
+
+    const sourcePlayer = players[sourcePlayerIndex];
+    if (!sourcePlayer) {
+      return null;
+    }
+
+    const sourceScore = getRoundScore(sourcePlayer.id, sourceRoundIndex);
+    if (sourceScore === null) {
+      return null;
+    }
+
+    return {
+      player: sourcePlayer,
+      roundIndex: sourceRoundIndex,
+      score: sourceScore
+    };
+  };
+
   const acceptStealOffer = () => {
     if (!stealOfferCell) {
       return;
     }
 
-    const previousPlayer = players[currentPlayerIndex - 1];
-    const previousScore = previousPlayer ? getRoundScore(previousPlayer.id, stealOfferCell.roundIndex) : null;
-    const stolenScore = previousScore || 0;
+    const source = getStealOfferSource(stealOfferCell);
+    const stolenScore = source?.score || 0;
     setAcceptedStolenScore(stolenScore);
     setInputValue(String(stolenScore));
     setActiveCell(stealOfferCell);
     setStealOfferCell(null);
+    setChasePromptCell(null);
     setEntryMode('quick');
   };
+  const stealOfferSource = stealOfferCell ? getStealOfferSource(stealOfferCell) : null;
+
 
   const rejectStealOffer = () => {
     if (!stealOfferCell) {
@@ -480,6 +596,75 @@ export default function FarklePage() {
     setInputValue('0');
     setActiveCell(stealOfferCell);
     setStealOfferCell(null);
+    setChasePromptCell(null);
+    setEntryMode('quick');
+  };
+
+  const quickSelectFarkleFromStealOffer = () => {
+    if (!stealOfferCell) {
+      return;
+    }
+
+    const scoreToSave = 0;
+    const wasCurrentTurn = isCurrentTurnCell(stealOfferCell.roundIndex, stealOfferCell.playerId);
+
+    setScores((prev) => ({
+      ...prev,
+      [stealOfferCell.playerId]: {
+        ...(prev[stealOfferCell.playerId] || {}),
+        [String(stealOfferCell.roundIndex)]: scoreToSave
+      }
+    }));
+    setGridEditVersion((prev) => prev + 1);
+
+    if (wasCurrentTurn) {
+      if (currentPlayerIndex === players.length - 1) {
+        const nextRoundIndex = stealOfferCell.roundIndex + 1;
+        if (settings.roundCount === null || nextRoundIndex < settings.roundCount) {
+          setCurrentRoundIndex(nextRoundIndex);
+        }
+        setCurrentPlayerIndex(0);
+      } else {
+        setCurrentPlayerIndex(currentPlayerIndex + 1);
+      }
+    }
+
+    setActiveCell(null);
+    setStealOfferCell(null);
+    setChasePromptCell(null);
+    setAcceptedStolenScore(null);
+    setInputValue('0');
+    setEntryMode('quick');
+  };
+
+  const combinedPromptCell = stealOfferCell || chasePromptCell;
+  const chasePromptInfo = useMemo(() => {
+    if (!combinedPromptCell || !targetChaseState.chaseActive || targetChaseState.chaseComplete || !targetChaseState.leaderId) {
+      return null;
+    }
+
+    const playerTotal = targetChaseState.totals[combinedPromptCell.playerId] || 0;
+    const pointsNeededToPass = combinedPromptCell.playerId === targetChaseState.leaderId
+      ? 0
+      : Math.max(1, targetChaseState.scoreToBeat - playerTotal + 1);
+
+    return {
+      scoreToBeat: targetChaseState.scoreToBeat,
+      pointsNeededToPass,
+      isCurrentLeader: combinedPromptCell.playerId === targetChaseState.leaderId
+    };
+  }, [combinedPromptCell, targetChaseState]);
+
+  const continueFromCombinedPrompt = () => {
+    if (!combinedPromptCell) {
+      return;
+    }
+
+    setAcceptedStolenScore(null);
+    setInputValue('0');
+    setActiveCell(combinedPromptCell);
+    setStealOfferCell(null);
+    setChasePromptCell(null);
     setEntryMode('quick');
   };
 
@@ -520,6 +705,7 @@ export default function FarklePage() {
 
     setActiveCell(null);
     setStealOfferCell(null);
+    setChasePromptCell(null);
     setAcceptedStolenScore(null);
     setInputValue('0');
     setEntryMode('quick');
@@ -635,7 +821,9 @@ export default function FarklePage() {
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
               {usesRoundWinCondition
                 ? `First through ${settings.roundCount} rounds • Round ${currentRoundIndex + 1}`
-                : `To ${settings.targetScore.toLocaleString()} • ${targetReached ? 'Final Round' : `Round ${currentRoundIndex + 1}`}`}
+                : targetChaseState.chaseActive
+                  ? `Score To Beat ${targetChaseState.scoreToBeat.toLocaleString()} • Round ${currentRoundIndex + 1}`
+                  : `To ${settings.targetScore.toLocaleString()} • Round ${currentRoundIndex + 1}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -828,21 +1016,74 @@ export default function FarklePage() {
           </div>
         </main>
 
-        {stealOfferCell && currentPlayerIndex > 0 && (
+        {combinedPromptCell && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setStealOfferCell(null)} />
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+              onClick={() => {
+                setStealOfferCell(null);
+                setChasePromptCell(null);
+              }}
+            />
             <div className="relative w-full max-w-sm rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
-              <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Steal Previous Score?</h3>
-              <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400 mb-6">
-                {displayPlayerName(players[currentPlayerIndex - 1])} scored {getRoundScore(players[currentPlayerIndex - 1].id, stealOfferCell.roundIndex) || 0} points this round. Accept it to preload the num pad, or start fresh.
-              </p>
+              <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
+                {stealOfferCell ? 'Steal Previous Score?' : 'Score To Beat'}
+              </h3>
+              {chasePromptInfo && (
+                <div className="mb-5 rounded-2xl border-2 border-amber-300 bg-gradient-to-b from-amber-50 to-orange-50 px-4 py-4 text-slate-900 shadow-sm dark:border-amber-700/80 dark:from-amber-900/30 dark:to-orange-900/20 dark:text-amber-100">
+                  <p className="text-sm font-black tracking-[0.01em] text-amber-700 dark:text-amber-300">
+                    {displayPlayerName(players.find((p) => p.id === targetChaseState.leaderId) || { id: '', name: 'Player', emoji: '👤' })} has reached the target
+                  </p>
+                  <p className="mt-1 text-sm font-bold uppercase tracking-[0.08em] text-slate-700 dark:text-amber-200/90">
+                    Score To Beat
+                  </p>
+                  <p className="text-4xl leading-none font-black text-orange-600 dark:text-orange-300">
+                    {chasePromptInfo.scoreToBeat.toLocaleString()}
+                  </p>
+                  {chasePromptInfo.isCurrentLeader ? (
+                    <p className="mt-2 text-base font-bold leading-snug text-slate-700 dark:text-amber-100/90">
+                      {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '👤' })} is currently leading. Everyone else must beat this score.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mt-3 text-sm font-bold uppercase tracking-[0.08em] text-slate-700 dark:text-amber-200/90">
+                        Needed To Pass
+                      </p>
+                      <p className="text-4xl leading-none font-black text-red-600 dark:text-red-300">
+                        {chasePromptInfo.pointsNeededToPass.toLocaleString()}
+                      </p>
+                      <p className="mt-2 text-base font-bold leading-snug text-slate-700 dark:text-amber-100/90">
+                        {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '👤' })} must clear this number this turn.
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+              {stealOfferCell && (
+                <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400 mb-6">
+                  {stealOfferSource
+                    ? `${displayPlayerName(stealOfferSource.player)} scored ${stealOfferSource.score} points ${stealOfferSource.roundIndex === stealOfferCell.roundIndex ? 'this round' : 'last round'}. Accept it to preload the num pad, or start fresh.`
+                    : 'Accept the previous score to preload the num pad, or start fresh.'}
+                </p>
+              )}
               <div className="flex flex-col gap-3">
-                <button onClick={acceptStealOffer} className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white shadow-sm active:scale-95 transition">
-                  Accept & Build On
-                </button>
-                <button onClick={rejectStealOffer} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 font-bold text-slate-700 active:scale-95 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  Start Fresh
-                </button>
+                {stealOfferCell ? (
+                  <>
+                    <button onClick={acceptStealOffer} className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white shadow-sm active:scale-95 transition">
+                      Accept & Build On
+                    </button>
+                    <button onClick={quickSelectFarkleFromStealOffer} className="w-full rounded-xl bg-red-600 py-3 font-bold text-white shadow-sm active:scale-95 transition">
+                      Farkle (0)
+                    </button>
+                    <button onClick={rejectStealOffer} className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 font-bold text-slate-700 active:scale-95 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      Start Fresh
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={continueFromCombinedPrompt} className="w-full rounded-xl bg-blue-600 py-3 font-bold text-white shadow-sm active:scale-95 transition">
+                    Continue
+                  </button>
+                )}
               </div>
             </div>
           </div>
