@@ -4,9 +4,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGameState } from '../hooks/useGameState';
+import { useGameProfilesSync } from '../hooks/useGameProfilesSync';
 import { useActiveSession } from '../hooks/useActiveSession';
 import { clearStoredGameState } from '../lib/activeGameState';
 import { db } from '../lib/firebase';
+import { DEFAULT_GAME_PROFILE } from '../lib/gameProfiles';
 import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../lib/gameHistory';
 import AuthButton from './components/AuthButton';
 
@@ -14,7 +16,6 @@ import AuthButton from './components/AuthButton';
 type Player = { id: string; name: string; emoji: string };
 type Round = { roundId: number; scores: Record<string, number> };
 type PlayerSnapshot = { id: string; name: string; emoji: string };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number };
 
 type MatchRecord = {
@@ -41,7 +42,7 @@ export default function Home() {
   const [activeMatchId, setActiveMatchId] = useGameState<string | null>('scorekeeper_active_match_id', null);
   const [, setHasCelebrated] = useGameState<boolean>('scorekeeper_has_celebrated', false);
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0 });
-  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
+  const { gameProfiles } = useGameProfilesSync();
 
   const [showDialog, setShowDialog] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export default function Home() {
   }, [gameProfiles, matchHistory]);
 
   const calculateTotal = (playerId: string) => {
-    const activeProfile = gameProfiles.find(p => p.name === gameName) || gameProfiles[0];
+    const activeProfile = gameProfiles.find((profile) => profile.name === gameName) || gameProfiles[0] || DEFAULT_GAME_PROFILE;
     const sum = rounds.reduce((total, r) => total + (r.scores[playerId] || 0), 0);
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };

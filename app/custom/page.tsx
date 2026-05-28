@@ -5,10 +5,12 @@ import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
+import { useGameProfilesSync } from '../../hooks/useGameProfilesSync';
 import type { ActiveSession } from '../../hooks/useActiveSession';
 import { clearStoredGameState } from '../../lib/activeGameState';
 import { db } from '../../lib/firebase';
 import { createGuestPlayerId, fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById, upsertCloudPlayer } from '../../lib/cloudPlayers';
+import { normalizeProfileName, type GameProfile } from '../../lib/gameProfiles';
 import { useActiveSession } from '../../hooks/useActiveSession';
 import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../../lib/gameHistory';
 import PlayerSetupPanel from '../components/PlayerSetupPanel';
@@ -18,7 +20,6 @@ import ScoreEntrySheet from '../components/ScoreEntrySheet';
 type Player = { id: string; name: string; emoji: string; isCloudUser?: boolean; photoURL?: string; useCustomEmoji?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type ActiveCell = { roundId: number; playerId: string } | null;
-type GameProfile = { name: string };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 
 // --- Helpers ---
@@ -57,7 +58,7 @@ function CustomTrackerContent() {
   const [gameHistory, setGameHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
   
   const [settings, setSettings] = useGameState<GameSettings>('scorekeeper_settings', { target: 0, scoreDirection: 'UP' });
-  const [gameProfiles, setGameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game' }]);
+  const { gameProfiles, setGameProfiles } = useGameProfilesSync();
   const [activeGameName, setActiveGameName] = useGameState<string>('scorekeeper_gameName', 'Custom Game');
   const [sessionWinCondition, setSessionWinCondition] = useGameState<'HIGH' | 'LOW'>('scorekeeper_session_win_condition', 'HIGH');
   
@@ -137,10 +138,32 @@ const allAvailablePlayers = useMemo(() => {
     });
   }, [globalRoster, cloudPlayers]); // <-- Dependencies must be globalRoster and cloudPlayers
 
+  const applyProfileToSetup = useCallback((profile: GameProfile) => {
+    setActiveGameName(profile.name);
+    setSessionWinCondition(profile.winCondition);
+    setSettings({
+      target: profile.target,
+      scoreDirection: profile.scoreDirection,
+      endMode: profile.endMode,
+      roundLimit: profile.roundLimit
+    });
+  }, [setActiveGameName, setSessionWinCondition, setSettings]);
+
+  const selectableGameProfiles = useMemo(
+    () => gameProfiles.filter((profile) => normalizeProfileName(profile.name) !== 'Custom Game'),
+    [gameProfiles]
+  );
+
   useEffect(() => {
     if (viewMode === 'SETUP' && !isGameStarted) {
+      const activeProfile = gameProfiles.find((profile) => profile.name === activeGameName);
       const lastPlayedOfThisType = gameHistory.find(g => g.gameName === activeGameName);
-      const nextSettings = lastPlayedOfThisType?.settings || { target: 0, scoreDirection: 'UP' };
+      const nextSettings = lastPlayedOfThisType?.settings || {
+        target: activeProfile?.target || 0,
+        scoreDirection: activeProfile?.scoreDirection || 'UP',
+        endMode: activeProfile?.endMode || 'TARGET',
+        roundLimit: activeProfile?.roundLimit || 0
+      };
       if (
         settings.target !== nextSettings.target ||
         settings.scoreDirection !== nextSettings.scoreDirection ||
@@ -150,12 +173,12 @@ const allAvailablePlayers = useMemo(() => {
         setSettings(nextSettings);
       }
 
-      const nextWinCondition = lastPlayedOfThisType?.winCondition || 'HIGH';
+      const nextWinCondition = lastPlayedOfThisType?.winCondition || activeProfile?.winCondition || 'HIGH';
       if (sessionWinCondition !== nextWinCondition) {
         setSessionWinCondition(nextWinCondition);
       }
     }
-  }, [activeGameName, gameHistory, isGameStarted, sessionWinCondition, settings, setSessionWinCondition, viewMode, setSettings]);
+  }, [activeGameName, gameHistory, gameProfiles, isGameStarted, sessionWinCondition, settings, setSessionWinCondition, viewMode, setSettings]);
 
   // Load game from URL parameter for editing
   useEffect(() => {
@@ -316,10 +339,23 @@ const allAvailablePlayers = useMemo(() => {
   const handleCreateGame = () => {
     const trimmed = newGameInput.trim();
     if (!trimmed) { setIsCreatingGame(false); return; }
-    if (!gameProfiles.find(p => p.name.toLowerCase() === trimmed.toLowerCase())) {
-      setGameProfiles([{ name: trimmed }, ...gameProfiles]);
+    const normalizedName = normalizeProfileName(trimmed);
+    if (!gameProfiles.find(p => p.name.toLowerCase() === normalizedName.toLowerCase())) {
+      setGameProfiles((prevProfiles) => ([
+        {
+          name: normalizedName,
+          winCondition: currentWinCondition,
+          scoreDirection: settings.scoreDirection,
+          endMode: settings.endMode || 'TARGET',
+          target: settings.target || 0,
+          roundLimit: settings.roundLimit || 0,
+          createdAt: new Date().toISOString(),
+          lastModified: new Date().toISOString()
+        },
+        ...prevProfiles
+      ]));
     }
-    setActiveGameName(trimmed);
+    setActiveGameName(normalizedName);
     setNewGameInput('');
     setIsCreatingGame(false);
   };
@@ -327,10 +363,15 @@ const allAvailablePlayers = useMemo(() => {
   const handleEditGameName = () => {
     const trimmed = editNameInput.trim();
     if (!trimmed || trimmed === activeGameName) { setIsEditingGameName(false); return; }
+    const normalizedName = normalizeProfileName(trimmed);
     
-    setGameProfiles(gameProfiles.map(p => p.name === activeGameName ? { ...p, name: trimmed } : p));
-    setGameHistory(gameHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: trimmed } : m));
-    setActiveGameName(trimmed);
+    setGameProfiles((prevProfiles) => prevProfiles.map((profile) => (
+      profile.name === activeGameName
+        ? { ...profile, name: normalizedName, lastModified: new Date().toISOString() }
+        : profile
+    )));
+    setGameHistory(gameHistory.map(m => m.gameName === activeGameName ? { ...m, gameName: normalizedName } : m));
+    setActiveGameName(normalizedName);
     setIsEditingGameName(false);
   };
 
@@ -723,10 +764,10 @@ const allAvailablePlayers = useMemo(() => {
             </div>
             
             <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
-              {gameProfiles.map(profile => (
+              {selectableGameProfiles.map(profile => (
                 <button 
                   key={profile.name} 
-                  onClick={() => setActiveGameName(profile.name)} 
+                  onClick={() => applyProfileToSetup(profile)} 
                   className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-800 dark:border-slate-100 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
                 >
                   {profile.name}
@@ -766,18 +807,15 @@ const allAvailablePlayers = useMemo(() => {
             )}
 
             <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
-            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
-              <div className="mb-6 pb-6 border-b border-slate-100 dark:border-slate-800">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rule: Win Condition</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                  <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
-                  <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
-                </div>
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm space-y-4">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Win Condition</label>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
+                <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Session Rules: End Condition</label>
-                
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">End Condition</label>
                 <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
                   <button onClick={() => setSettings({ ...settings, endMode: 'TARGET', scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${(settings.endMode || 'TARGET') === 'TARGET' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🎯 Target Score</button>
                   <button onClick={() => setSettings({ ...settings, endMode: 'ROUNDS' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.endMode === 'ROUNDS' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🔄 Num of Rounds</button>

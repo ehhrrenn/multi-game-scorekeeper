@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { fetchCloudPlayersWithLegacy, formatFirstName, mergePlayersById } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
+import { useGameProfilesSync } from '../../hooks/useGameProfilesSync';
 import { getWinnerIdsForRecord, isGameCompleted } from '../../lib/gameHistory';
 import { useGameState } from '../../hooks/useGameState';
 
@@ -14,7 +15,6 @@ import { useGameState } from '../../hooks/useGameState';
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean };
 type Round = { roundId: number; scores: Record<string, number> };
 type PlayerSnapshot = { id: string; name: string; emoji: string; photoURL?: string };
-type GameProfile = { name: string; winCondition: 'HIGH' | 'LOW'; scoreDirection: 'UP' | 'DOWN' };
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN' };
 
 type MatchRecord = {
@@ -53,7 +53,7 @@ export default function RosterPage() {
   // 2. Local Storage State (The Legacy Data)
   const [localPlayers] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [localHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
-  const [gameProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [{ name: 'Custom Game', winCondition: 'HIGH', scoreDirection: 'UP' }]);
+  const { gameProfiles } = useGameProfilesSync();
 
   // 3. Fetch from Firestore on mount
   useEffect(() => {
