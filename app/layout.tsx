@@ -1,11 +1,18 @@
 // app/layout.tsx
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import BottomNav from './components/BottomNav';
 import AuthButton from './components/AuthButton';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'Scorekeeper Pro',
   description: 'Scores Kept. Scores Settled.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover'
 };
 
 <AuthButton />

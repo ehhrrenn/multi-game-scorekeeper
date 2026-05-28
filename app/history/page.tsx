@@ -311,7 +311,7 @@ export default function HistoryPage() {
                   {/* Replace the complex avatar logic with a simple text-only fallback for the dropdown */}
                   {uniquePlayers.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? '👤' : (p.emoji || '👤')} {p.isCloudUser ? formatFirstName(p.name) : p.name}
+                      {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? '☞' : (p.emoji || '☞')} {p.isCloudUser ? formatFirstName(p.name) : p.name}
                     </option>
                   ))}
                 </select>

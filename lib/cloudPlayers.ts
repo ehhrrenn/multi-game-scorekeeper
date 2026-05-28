@@ -26,7 +26,7 @@ export function formatFirstName(name: string | undefined | null): string {
 
 function normalizePlayer(id: string, raw: Record<string, unknown>, cloudFlag = true): SyncedPlayer {
   const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Unknown';
-  const emoji = typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji : '👤';
+  const emoji = typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji : '☞';
 
   return {
     id,
@@ -81,7 +81,7 @@ export async function upsertCloudPlayer(db: Firestore, player: SyncedPlayer): Pr
   const payload: Record<string, unknown> = {
     id: player.id,
     name: player.name || 'Unknown',
-    emoji: player.emoji || '👤',
+    emoji: player.emoji || '☞',
     photoURL: player.photoURL || '',
     useCustomEmoji: Boolean(player.useCustomEmoji),
     isCloudUser: true,

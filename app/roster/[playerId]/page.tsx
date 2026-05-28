@@ -16,7 +16,7 @@ import GameCard, { GameRecord } from '../../components/GameCard';
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean; isCloudUser?: boolean; useCustomEmoji?: boolean };
 
-const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
+const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
 
 export default function PlayerProfilePage() {
   const params = useParams();
@@ -166,7 +166,7 @@ export default function PlayerProfilePage() {
 const handleEditClick = useCallback(() => {
   if (player) {
     setEditName(player.name);
-    setEditEmoji(player.emoji || '👤');
+    setEditEmoji(player.emoji || '☞');
     setEditUseCustomEmoji(Boolean(player.useCustomEmoji) || !player.photoURL);
   }
 
@@ -187,7 +187,7 @@ const handleSave = async () => {
       const userRef = doc(db, 'users', player.id);
       await updateDoc(userRef, {
         name: editName,
-        emoji: editUseCustomEmoji ? (editEmoji || player.emoji || '👤') : (player.emoji || '👤'),
+        emoji: editUseCustomEmoji ? (editEmoji || player.emoji || '☞') : (player.emoji || '☞'),
         useCustomEmoji: editUseCustomEmoji,
       });
       setIsEditing(false);
@@ -196,7 +196,7 @@ const handleSave = async () => {
     }
   } else {
     // 2. Original local save logic for Guest/Local players
-    setLocalPlayers(prev => prev.map(p => p.id === player.id ? { ...p, name: editName, emoji: editEmoji || p.emoji || '👤', useCustomEmoji: editUseCustomEmoji } : p));
+    setLocalPlayers(prev => prev.map(p => p.id === player.id ? { ...p, name: editName, emoji: editEmoji || p.emoji || '☞', useCustomEmoji: editUseCustomEmoji } : p));
     setIsEditing(false);
   }
 };
@@ -445,7 +445,7 @@ const handleDelete = async () => {
                 {(!editUseCustomEmoji && player.photoURL) ? (
                   <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
                 ) : (
-                  <>{editEmoji || '👤'}</>
+                  <>{editEmoji || '☞'}</>
                 )}
                 <div className="absolute -bottom-1 bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Tap</div>
               </button>
@@ -548,10 +548,10 @@ const handleDelete = async () => {
       {/* Emoji Picker Modal */}
             {showEmojiPicker && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
-                <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+                <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
-                    <button onClick={() => setShowEmojiPicker(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
+                    <h3 className="text-xl font-black text-[#111]">Choose Emoji</h3>
+                    <button onClick={() => setShowEmojiPicker(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-black/20 rounded-none text-black/70 hover:text-black active:scale-95 transition-all">✕</button>
                   </div>
                   
                   {/* INJECTED: Revert to Photo Button */}
@@ -561,7 +561,7 @@ const handleDelete = async () => {
                         setEditUseCustomEmoji(false);
                         setShowEmojiPicker(false); // Close the modal
                       }}
-                      className="w-full mb-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold rounded-xl flex items-center justify-center gap-2 border border-blue-200 dark:border-blue-800 transition-all active:scale-95"
+                      className="w-full mb-4 py-3 bg-white text-black font-bold rounded-none flex items-center justify-center gap-2 border border-black/20 transition-all active:scale-95"
                     >
                       <span>🖼️</span> Use Google Photo
                     </button>
@@ -572,7 +572,7 @@ const handleDelete = async () => {
                       <button 
                         key={emoji} 
                         onClick={() => { setEditEmoji(emoji); setEditUseCustomEmoji(true); setShowEmojiPicker(false); }}
-                        className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
+                        className="text-3xl aspect-square flex items-center justify-center bg-white border border-black/20 hover:bg-black/5 rounded-none active:scale-90 transition-all"
                       >
                         {emoji}
                       </button>

@@ -208,57 +208,60 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
-
-      {/* 🟢 NEW CLOUD LOGIN HEADER - Pushes button to top right */}
-      <header className="max-w-screen-md mx-auto px-4 pt-4 flex justify-end z-50 relative">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => router.push('/notes')}
-            className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-center text-lg hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
-            aria-label="Shared Notes"
-            title="Shared Notes"
-          >
-            📝
-          </button>
-          <AuthButton />
-        </div>
-      </header>
-      {/* STICKY HEADER */}
-      <div className={`fixed top-0 left-0 right-0 h-16 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 transition-all duration-300 flex items-center px-4 max-w-screen-md mx-auto ${isScrolled ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">🏆</span>
-          <h1 className="text-xl font-black text-slate-800 dark:text-white">Scorekeeper Pro</h1>
+    <>
+      {/* STICKY HEADER — outside <main> so CSS filter doesn't break fixed positioning */}
+      <div className={`newsprint-sticky fixed top-0 left-0 right-0 h-14 z-40 border-b border-black/30 transition-all duration-300 flex items-center px-4 ${isScrolled ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}>
+        <div className="max-w-screen-md mx-auto w-full pl-9 flex items-center gap-2">
+          <span className="text-2xl leading-none">❖</span>
+          <h1 className="text-xl font-black text-[#111] tracking-tight [font-family:Georgia,'Times_New_Roman',serif]">Scorekeeper Pro</h1>
         </div>
       </div>
 
+      {/* AUTH HEADER — outside <main>; keep auth control in native theme */}
+      <div className="newsprint-header">
+        <header className="max-w-screen-md mx-auto px-4 pt-4 flex justify-end z-50 relative">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/notes')}
+              className="newsprint-invert w-10 h-10 rounded-full bg-[#fbfbf8] border border-black/20 text-black hover:border-black flex items-center justify-center text-lg active:scale-95 transition-colors"
+              aria-label="Shared Notes"
+              title="Shared Notes"
+            >
+              ✎
+            </button>
+            <AuthButton />
+          </div>
+        </header>
+      </div>
+
+      <main className="min-h-screen bg-[#f6f6f2] text-[#111] pb-32 transition-colors newsprint-page">
       <div className="max-w-screen-md mx-auto pt-10 px-4 animate-in fade-in slide-in-from-bottom-2">
         {/* HERO SECTION */}
-        <div className="mb-10">
-          <h1 className="text-5xl font-black text-slate-800 dark:text-white tracking-tight leading-tight">Scorekeeper Pro</h1>
-          <p className="text-slate-500 dark:text-slate-400 font-bold mt-2 text-lg uppercase tracking-widest">Scores Kept. Scores Settled.</p>
+        <div className="mb-10 border-y-2 border-black py-4">
+          <h1 className="text-5xl font-black text-[#111] tracking-tight leading-tight [font-family:Georgia,'Times_New_Roman',serif]">Scorekeeper Pro</h1>
+          <p className="text-black/65 font-bold mt-2 text-lg uppercase tracking-[0.22em]">Scores Kept. Scores Settled.</p>
         </div>
 
         {/* DIALOG FOR ACTIVE GAME */}
         {showDialog && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDialog(false)} />
-            <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="text-4xl text-center mb-4">⚠️</div>
-              <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Active Game Found</h3>
-              <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
+            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDialog(false)} />
+            <div className="relative w-full max-w-sm bg-[#f8f8f5] border-2 border-black/80 rounded-[1.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="text-4xl text-center mb-4">❗</div>
+              <h3 className="text-2xl font-black mb-2 text-[#111] text-center [font-family:Georgia,'Times_New_Roman',serif]">Active Game Found</h3>
+              <p className="text-black/70 text-center mb-8 leading-relaxed font-medium">
                 {activeSession?.gameType
                   ? `A ${activeSession.gameType === 'custom' ? 'Custom Game' : activeSession.gameType === 'yahtzee' ? 'Yahtzee' : 'Farkle'} game is already in progress. Save it first, or discard it to start fresh.`
                   : 'A game is already in progress. Save it first, or discard it to start fresh.'}
               </p>
               <div className="flex flex-col gap-3">
-                <button onClick={() => void saveAndStartNew()} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-blue-100 dark:shadow-none active:scale-95 transition">
-                  💾 Save & Start New
+                <button onClick={() => void saveAndStartNew()} className="w-full bg-black text-white py-4 rounded-xl font-black active:scale-95 transition border border-black">
+                  ✶ Save & Start New
                 </button>
-                <button onClick={deleteAndStartNew} className="w-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-100 dark:border-red-900/30 py-4 rounded-2xl font-black active:bg-red-100 dark:active:bg-red-900/40 transition">
-                  🗑️ Discard & Start New
+                <button onClick={deleteAndStartNew} className="w-full bg-white text-black border border-black/35 py-4 rounded-xl font-black active:bg-black/5 transition">
+                  ✕ Discard & Start New
                 </button>
-                <button onClick={() => setShowDialog(false)} className="w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold py-3 mt-2">
+                <button onClick={() => setShowDialog(false)} className="w-full text-black/55 hover:text-black font-bold py-3 mt-2">
                   Cancel
                 </button>
               </div>
@@ -267,37 +270,37 @@ export default function Home() {
         )}
 
         {/* GAME MODULES LIST */}
-        <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2">Custom Games</h2>
+        <h2 className="text-xs font-black text-black/55 uppercase tracking-[0.18em] mb-3 ml-2">Custom Games</h2>
         
         <div className="grid gap-3 mb-8">
-          <button onClick={() => router.push('/choosy')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
+          <button onClick={() => router.push('/choosy')} className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between hover:border-black active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
-                👆
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20 group-hover:scale-110 transition-transform">
+                ☞
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-800 dark:text-white">Choosy</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Random Touch Selector</p>
+                <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Choosy</h3>
+                <p className="text-xs font-bold text-black/50">Random Touch Selector</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
+            <div className="text-black/35 text-xl font-bold group-hover:text-black transition-colors">▸</div>
           </button>
           
           {/* Main Custom Game */}
           <button 
             onClick={() => handleGameSelect('Custom Game')} 
-            className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between active:scale-[0.98] transition hover:border-blue-300 dark:hover:border-blue-700 group"
+            className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between active:scale-[0.98] transition hover:border-black group"
           >
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-blue-100 dark:border-slate-700">
-                🧮
+              <div className="w-12 h-12 bg-white text-black rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20">
+                ✷
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Start Custom Game</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Universal multi-player score sheet.</p>
+                <h3 className="text-lg font-black text-[#111] transition-colors [font-family:Georgia,'Times_New_Roman',serif]">Start Custom Game</h3>
+                <p className="text-xs font-bold text-black/50">Universal multi-player score sheet.</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:translate-x-1 transition-transform">▶</div>
+            <div className="text-black/35 text-xl font-bold group-hover:translate-x-1 transition-transform">▸</div>
           </button>
 
           {/* Dynamic Recent Games from History */}
@@ -305,53 +308,54 @@ export default function Home() {
             <button 
               key={name}
               onClick={() => handleGameSelect(name)} 
-              className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between active:scale-[0.98] transition hover:border-blue-300 dark:hover:border-blue-700 group"
+              className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between active:scale-[0.98] transition hover:border-black group"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-                  📋
+                <div className="w-12 h-12 bg-white text-black rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20">
+                  ✤
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-800 dark:text-white">{name}</h3>
-                  <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Play with saved rules.</p>
+                  <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">{name}</h3>
+                  <p className="text-xs font-bold text-black/50">Play with saved rules.</p>
                 </div>
               </div>
-              <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:translate-x-1 transition-transform">➔</div>
+              <div className="text-black/35 text-xl font-bold group-hover:translate-x-1 transition-transform">▸</div>
             </button>
           ))}
         </div>
 
-        <h2 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-2 mt-8">Classic Games</h2>
+        <h2 className="text-xs font-black text-black/55 uppercase tracking-[0.18em] mb-3 ml-2 mt-8">Classic Games</h2>
         <div className="grid gap-3">
           {/* Yahtzee Module */}
-          <button onClick={() => handleClassicGameSelect('/yahtzee')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
+          <button onClick={() => handleClassicGameSelect('/yahtzee')} className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between hover:border-black active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
-                🎲
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20 group-hover:scale-110 transition-transform">
+                ⚄
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-800 dark:text-white">Yahtzee</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Standard & Triple variants</p>
+                <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Yahtzee</h3>
+                <p className="text-xs font-bold text-black/50">Standard & Triple variants</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
+            <div className="text-black/35 text-xl font-bold group-hover:text-black transition-colors">▸</div>
           </button>
 
-          <button onClick={() => handleClassicGameSelect('/farkle')} className="w-full text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all cursor-pointer group">
+          <button onClick={() => handleClassicGameSelect('/farkle')} className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between hover:border-black active:scale-[0.98] transition-all cursor-pointer group">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-2xl shadow-sm border border-slate-100 dark:border-slate-700 group-hover:scale-110 transition-transform">
-                🎲
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20 group-hover:scale-110 transition-transform">
+                ⚅
               </div>
               <div>
-                <h3 className="text-lg font-black text-slate-800 dark:text-white">Farkle</h3>
-                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Regular & stealing modes</p>
+                <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Farkle</h3>
+                <p className="text-xs font-bold text-black/50">Regular & stealing modes</p>
               </div>
             </div>
-            <div className="text-slate-300 dark:text-slate-600 text-xl font-bold group-hover:text-blue-500 transition-colors">▶</div>
+            <div className="text-black/35 text-xl font-bold group-hover:text-black transition-colors">▸</div>
           </button>
         </div>
 
       </div>
-    </main>
+      </main>
+    </>
   );
 }

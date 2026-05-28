@@ -39,7 +39,7 @@ export default function AuthButton() {
         await upsertCloudPlayer(safeDb, {
           id: result.user.uid,
           name: result.user.displayName || 'Anonymous Player',
-          emoji: existing?.emoji || '👤',
+          emoji: existing?.emoji || '☞',
           photoURL: existing?.photoURL || result.user.photoURL || '',
           useCustomEmoji: existing?.useCustomEmoji || false,
           isCloudUser: true,
@@ -59,7 +59,7 @@ export default function AuthButton() {
 
   if (user) {
     const useCustomEmoji = Boolean(profile?.useCustomEmoji);
-    const displayEmoji = profile?.emoji || '👤';
+    const displayEmoji = profile?.emoji || '☞';
     const displayName = profile?.name || user.displayName || '';
     const displayPhotoURL = profile?.photoURL || user.photoURL || '';
 

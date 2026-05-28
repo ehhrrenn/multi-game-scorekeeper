@@ -23,13 +23,13 @@ type ActiveCell = { roundId: number; playerId: string } | null;
 type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: 'TARGET' | 'ROUNDS'; roundLimit?: number };
 
 // --- Helpers ---
-const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
+const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
 const EMOJI_COLORS: Record<string, string> = {
-  '🦊': '#f97316', '⚡️': '#eab308', '🦖': '#22c55e', '🤠': '#8b5cf6', 
-  '👾': '#a855f7', '🍕': '#ef4444', '🚀': '#3b82f6', '🐙': '#ec4899', 
-  '🦄': '#d946ef', '🥑': '#84cc16', '🔥': '#dc2626', '💎': '#06b6d4', 
-  '👻': '#94a3b8', '👑': '#fbbf24', '😎': '#38bdf8', '🤖': '#64748b',
-  '👽': '#10b981', '🐶': '#d97706', '🐱': '#f59e0b', '🐼': '#1e293b'
+  '☞': '#f97316', '✂': '#eab308', '☂': '#22c55e', '☎': '#8b5cf6',
+  '✈': '#a855f7', '✉': '#ef4444', '✍': '#3b82f6', '✎': '#ec4899',
+  '☕': '#d946ef', '⚓': '#84cc16', '⚙': '#dc2626', '⌚': '#06b6d4',
+  '⌛': '#94a3b8', '⚖': '#fbbf24', '⚒': '#38bdf8', '⚗': '#64748b',
+  '⚐': '#10b981', '⚑': '#d97706', '♟': '#f59e0b', '♜': '#1e293b'
 };
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
@@ -42,8 +42,8 @@ const pseudoRandom = (seed: number) => {
 export default function CustomTracker() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-        <div className="text-slate-500 dark:text-slate-400">Loading...</div>
+      <main className="min-h-screen newsprint-page flex items-center justify-center">
+        <div className="text-black/60">Loading...</div>
       </main>
     }>
       <CustomTrackerContent />
@@ -717,7 +717,7 @@ const allAvailablePlayers = useMemo(() => {
     : `${gridWinConditionLabel} • ${gridEndLabel} • Round ${Math.max(rounds.length, 1)}`;
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
+    <main className="min-h-screen newsprint-page text-[#111] pb-32 transition-colors">
       
       {showCelebration && (
         <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
@@ -747,20 +747,20 @@ const allAvailablePlayers = useMemo(() => {
 
       {viewMode === 'SETUP' && (
         <div className="max-w-screen-md mx-auto animate-in fade-in slide-in-from-bottom-2 pb-24">
-          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white">🧮 Game Setup</h1>
+          <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+            <h1 className="text-2xl font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">✷ Game Setup</h1>
             <button 
               onClick={handleStartOrResumeGame} 
               disabled={players.length === 0}
-              className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${isGameStarted ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
+              className={`disabled:bg-black/10 disabled:text-black/40 px-5 h-10 rounded-none font-bold active:scale-95 transition-all flex items-center justify-center text-sm border ${isGameStarted ? 'bg-black text-white border-black' : 'bg-white text-black border-black/25'}`}
             >
-              {isGameStarted ? '▶️ Resume Game' : '🚀 Start Game'}
+              {isGameStarted ? '▸ Resume Game' : '✦ Start Game'}
             </button>
           </div>
           
           <div className="p-6 pt-[88px]">
             <div className="flex justify-between items-end mb-2 ml-1">
-               <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Select Game</h2>
+               <h2 className="text-sm font-bold text-black/55 uppercase tracking-widest">Select Game</h2>
             </div>
             
             <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
@@ -768,14 +768,14 @@ const allAvailablePlayers = useMemo(() => {
                 <button 
                   key={profile.name} 
                   onClick={() => applyProfileToSetup(profile)} 
-                  className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 border-slate-800 dark:border-slate-100 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+                  className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-black text-white border-black' : 'bg-white text-black/70 border-black/20 hover:border-black'}`}
                 >
                   {profile.name}
                 </button>
               ))}
               <button 
                 onClick={() => setIsCreatingGame(true)} 
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-slate-800 transition-all"
+                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-black bg-white border border-black/20 transition-all hover:border-black"
               >
                 + New
               </button>
@@ -785,14 +785,14 @@ const allAvailablePlayers = useMemo(() => {
               <div className="flex items-center gap-2 mb-6">
                  {isEditingGameName ? (
                     <div className="flex w-full gap-2 animate-in slide-in-from-left-2">
-                       <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-slate-200 dark:border-slate-700 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 bg-white dark:bg-slate-900 font-bold dark:text-white" autoFocus />
-                       <button onClick={handleEditGameName} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Save</button>
-                       <button onClick={() => setIsEditingGameName(false)} className="bg-slate-200 dark:bg-slate-800 px-4 rounded-xl font-bold text-slate-600 dark:text-slate-300">✕</button>
+                      <input type="text" value={editNameInput} onChange={e => setEditNameInput(e.target.value)} className="border-2 border-black/20 p-3 rounded-none flex-grow focus:outline-none focus:border-black bg-white font-bold text-black" autoFocus />
+                      <button onClick={handleEditGameName} className="bg-black text-white px-5 rounded-none font-bold">Save</button>
+                      <button onClick={() => setIsEditingGameName(false)} className="bg-white border border-black/20 px-4 rounded-none font-bold text-black">✕</button>
                     </div>
                  ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-black text-slate-800 dark:text-white px-2">{activeGameName}</span>
-                      <button onClick={() => { setEditNameInput(activeGameName); setIsEditingGameName(true); }} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">✏️</button>
+                      <button onClick={() => { setEditNameInput(activeGameName); setIsEditingGameName(true); }} className="text-black/45 hover:text-black transition">✎</button>
                     </div>
                  )}
               </div>
@@ -800,39 +800,39 @@ const allAvailablePlayers = useMemo(() => {
 
             {isCreatingGame && (
               <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
-                <input type="text" value={newGameInput} onChange={e => setNewGameInput(e.target.value)} placeholder="e.g. Uno, Darts..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-blue-500 font-bold dark:text-white" autoFocus />
-                <button onClick={handleCreateGame} className="bg-blue-600 text-white px-5 rounded-xl font-bold">Add</button>
-                <button onClick={() => setIsCreatingGame(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
+                <input type="text" value={newGameInput} onChange={e => setNewGameInput(e.target.value)} placeholder="e.g. Uno, Darts..." className="border-2 border-black/20 bg-white p-3 rounded-none flex-grow focus:outline-none focus:border-black font-bold text-black" autoFocus />
+                <button onClick={handleCreateGame} className="bg-black text-white px-5 rounded-none font-bold">Add</button>
+                <button onClick={() => setIsCreatingGame(false)} className="bg-white text-black border border-black/25 px-4 rounded-none font-bold">✕</button>
               </div>
             )}
 
-            <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
-            <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm space-y-4">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Win Condition</label>
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'HIGH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🏆 Highest Score</button>
-                <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>⛳️ Lowest Score</button>
+            <h2 className="text-sm font-bold text-black/55 uppercase tracking-widest mb-2 ml-1 mt-6">Game Rules</h2>
+            <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-5 mb-8 space-y-4">
+              <label className="text-xs font-bold text-black/55 uppercase tracking-widest block">Win Condition</label>
+              <div className="grid grid-cols-2 border border-black/20 bg-white">
+                <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`py-2.5 text-sm font-bold transition-all border-r border-black/20 ${currentWinCondition === 'HIGH' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>High Score</button>
+                <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`py-2.5 text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Low Score</button>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">End Condition</label>
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-                  <button onClick={() => setSettings({ ...settings, endMode: 'TARGET', scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${(settings.endMode || 'TARGET') === 'TARGET' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🎯 Target Score</button>
-                  <button onClick={() => setSettings({ ...settings, endMode: 'ROUNDS' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.endMode === 'ROUNDS' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🔄 Num of Rounds</button>
+                <label className="text-xs font-bold text-black/55 uppercase tracking-widest block mb-3">End Condition</label>
+                <div className="grid grid-cols-2 border border-black/20 bg-white mb-4">
+                  <button onClick={() => setSettings({ ...settings, endMode: 'TARGET', scoreDirection: 'UP' })} className={`py-2 text-sm font-bold transition-all border-r border-black/20 ${(settings.endMode || 'TARGET') === 'TARGET' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Target Score</button>
+                  <button onClick={() => setSettings({ ...settings, endMode: 'ROUNDS' })} className={`py-2 text-sm font-bold transition-all ${settings.endMode === 'ROUNDS' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Num of Rounds</button>
                 </div>
 
                 {(settings.endMode || 'TARGET') === 'TARGET' && (
                   <div className="space-y-2">
-                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-3">
-                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'UP' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'UP' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Count Up</button>
-                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'DOWN' })} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${settings.scoreDirection === 'DOWN' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📉 Count Down</button>
+                    <div className="grid grid-cols-2 border border-black/20 bg-white mb-3">
+                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'UP' })} className={`py-2 text-sm font-bold transition-all border-r border-black/20 ${settings.scoreDirection === 'UP' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Count Up</button>
+                      <button onClick={() => setSettings({ ...settings, scoreDirection: 'DOWN' })} className={`py-2 text-sm font-bold transition-all ${settings.scoreDirection === 'DOWN' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Count Down</button>
                     </div>
                     <input 
                       type="number" 
                       value={settings.target || ''} 
                       onChange={e => setSettings({ ...settings, target: parseInt(e.target.value) || 0 })} 
                       placeholder={settings.scoreDirection === 'UP' ? 'Target Score (Optional)' : 'Starting Score (e.g. 501)'}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                      className="w-full bg-white border border-black/20 rounded-none p-3 font-bold text-black outline-none focus:border-black"
                     />
                   </div>
                 )}
@@ -843,7 +843,7 @@ const allAvailablePlayers = useMemo(() => {
                     value={settings.roundLimit || ''} 
                     onChange={e => setSettings({ ...settings, roundLimit: parseInt(e.target.value) || 0 })} 
                     placeholder="Number of Rounds"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 font-bold text-slate-800 dark:text-white outline-none focus:border-blue-500"
+                    className="w-full bg-white border border-black/20 rounded-none p-3 font-bold text-black outline-none focus:border-black"
                   />
                 )}
               </div>
@@ -874,17 +874,17 @@ const allAvailablePlayers = useMemo(() => {
 
           {activeEmojiPicker && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-              <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+              <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
-                  <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
+                  <h3 className="text-xl font-black text-[#111]">Choose Emoji</h3>
+                  <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-white border border-black/20 rounded-none text-black/70 hover:text-black active:scale-95 transition-all">✕</button>
                 </div>
                 <div className="grid grid-cols-5 gap-3">
                   {EMOJIS.map(emoji => (
                     <button 
                       key={emoji} 
                       onClick={() => { updateEmoji(activeEmojiPicker, emoji); setActiveEmojiPicker(null); }}
-                      className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
+                      className="text-3xl aspect-square flex items-center justify-center bg-white border border-black/20 hover:bg-black/5 rounded-none active:scale-90 transition-all"
                     >
                       {emoji}
                     </button>
@@ -918,21 +918,21 @@ const allAvailablePlayers = useMemo(() => {
 
       {viewMode !== 'SETUP' && (
         <div className="max-w-screen-md mx-auto">
-          <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+          <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
             <div className="min-w-0 pr-4">
-              <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate">{activeGameName}</h1>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
+              <h1 className="text-2xl font-black text-[#111] truncate [font-family:Georgia,'Times_New_Roman',serif]">{activeGameName}</h1>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/55 truncate">
                 {customHeaderSubtitle}
               </p>
             </div>
-            <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+            <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-white border border-black/20 text-black rounded-full flex items-center justify-center text-xl active:scale-95 transition">✶</button>
           </div>
 
           <div className="pt-16 px-4">
-             <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-                <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
-                <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
+             <div className="sticky top-16 z-40 bg-[#f6f6f2]/95 backdrop-blur-md pt-2 pb-3 mb-3">
+              <div className="flex bg-black/5 p-1 rounded-xl">
+                <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white text-black shadow-sm' : 'text-black/60'}`}>Score Grid</button>
+                <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white text-black shadow-sm' : 'text-black/60'}`}>Live Graph</button>
               </div>
             </div>
 
@@ -959,7 +959,7 @@ const allAvailablePlayers = useMemo(() => {
                                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                                     <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized className="w-full h-full object-cover rounded-full" />
                                   ) : (
-                                    <span>{p.emoji || '👤'}</span>
+                                    <span>{p.emoji || '☞'}</span>
                                   )}
                                 </div>
                                 <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
@@ -1013,33 +1013,33 @@ const allAvailablePlayers = useMemo(() => {
                 </div>
 
                 <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
-                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+                  <div className="rounded-xl border border-black/20 bg-[#f6f6f2]/95 p-3 backdrop-blur-md">
                     <div className="flex flex-row gap-2">
                       {isGameOver ? (
                         <button
                           onClick={handleStartNewGame}
-                          className="flex-1 bg-blue-600 text-white p-4 rounded-xl font-black active:bg-blue-700 transition-colors shadow-lg shadow-blue-100 dark:shadow-none"
+                          className="flex-1 bg-black text-white p-4 rounded-xl font-black transition-colors"
                         >
-                          🔄 Start New
+                          ↻ Start New
                         </button>
                       ) : (
-                        <button onClick={addRound} className="flex-1 bg-white dark:bg-slate-900 border-2 dark:border-slate-800 p-3.5 rounded-xl font-bold active:bg-slate-50 dark:active:bg-slate-800 transition-colors shadow-sm">
+                        <button onClick={addRound} className="flex-1 bg-white border-2 border-black/20 p-3.5 rounded-xl font-bold active:bg-black/5 transition-colors">
                           + Round
                         </button>
                       )}
                       {isGameOver && (
                         <button
                           onClick={handleShare}
-                          className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm"
+                          className="bg-white border border-black/20 text-black p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                         >
-                          📤 Share
+                          ⇪ Share
                         </button>
                       )}
                       <button
                         onClick={handleSaveAndClose}
-                        className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-sm ${isGameOver ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                        className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${isGameOver ? 'bg-black text-white' : 'bg-black text-white'}`}
                       >
-                        {isGameOver ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
+                        {isGameOver ? 'Finish & Close' : 'Finish & Close'}
                       </button>
                     </div>
                   </div>
@@ -1056,7 +1056,7 @@ const allAvailablePlayers = useMemo(() => {
                       <span>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                           <Image src={p.photoURL} alt={p.name} width={16} height={16} unoptimized className="w-4 h-4 object-cover rounded-full" />
                         ) : (
-                          <span>{p.emoji || '👤'}</span>
+                          <span>{p.emoji || '☞'}</span>
                         )}</span>
                     </div>
                   ))}

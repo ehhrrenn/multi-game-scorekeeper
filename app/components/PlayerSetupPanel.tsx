@@ -43,13 +43,13 @@ export default function PlayerSetupPanel({
 }: Props) {
   return (
     <>
-      <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+      <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-black/55">
         Saved Roster
       </h2>
 
       <div className="mb-2 flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
         {isLoading ? (
-          <div className="whitespace-nowrap shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-400 dark:border-slate-700 dark:bg-slate-900">
+          <div className="whitespace-nowrap shrink-0 rounded-full border border-black/20 bg-white px-4 py-2.5 text-sm font-bold text-black/50">
             Loading roster...
           </div>
         ) : (
@@ -57,23 +57,23 @@ export default function PlayerSetupPanel({
             <button
               key={player.id}
               onClick={() => onAddFromRoster(player)}
-              className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 shadow-sm transition-all flex items-center gap-2 active:scale-95"
+              className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold bg-white text-black/80 border border-black/20 hover:border-black transition-all flex items-center gap-2 active:scale-95"
             >
               <span className="w-5 h-5 flex items-center justify-center flex-shrink-0 overflow-hidden rounded-full">
                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
                   <img src={player.photoURL} alt={player.name} referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" />
                 ) : (
-                  <span>{player.emoji || '👤'}</span>
+                  <span>{player.emoji || '☞'}</span>
                 )}
               </span>
               {formatName(player)}
-              {player.isCloudUser && <span className="text-blue-500 text-xs">☁️</span>}
+              {player.isCloudUser && <span className="text-black/50 text-xs">◈</span>}
             </button>
           ))
         )}
         <button
           onClick={onNewPlayerClick}
-          className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 transition-all"
+          className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold text-black bg-white border border-black/20 transition-all hover:border-black"
         >
           + New Player
         </button>
@@ -82,11 +82,11 @@ export default function PlayerSetupPanel({
       {createPlayerSlot}
 
       <div className="mb-2 ml-1 flex items-end justify-between mt-6">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-black/55">
           Active Players
         </h2>
         {onClearSetup && activePlayers.length > 0 && (
-          <button onClick={onClearSetup} className="text-sm font-bold text-red-500">
+          <button onClick={onClearSetup} className="text-sm font-bold text-black/65 hover:text-black">
             Clear Setup
           </button>
         )}
@@ -94,31 +94,31 @@ export default function PlayerSetupPanel({
 
       <div className="space-y-3">
         {activePlayers.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-slate-400 font-medium shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-none border border-black/20 bg-[#fbfbf8] p-6 text-center text-black/55 font-medium">
             {emptyMessage}
           </div>
         ) : (
           activePlayers.map((player, index) => (
             <div
               key={player.id}
-              className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              className="flex items-center gap-3 rounded-none border border-black/20 bg-[#fbfbf8] p-4"
             >
               <button
                 onClick={() => onEmojiClick(player.id)}
-                className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-2xl shadow-sm dark:bg-slate-800"
+                className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-none border border-black/20 bg-white text-2xl"
               >
                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
-                  <img src={player.photoURL} alt={player.name} referrerPolicy="no-referrer" className="h-full w-full object-cover rounded-full" />
+                  <img src={player.photoURL} alt={player.name} referrerPolicy="no-referrer" className="h-full w-full object-cover rounded-none" />
                 ) : (
-                  <span>{player.emoji || '👤'}</span>
+                  <span>{player.emoji || '☞'}</span>
                 )}
               </button>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-base font-black text-slate-800 dark:text-white">
+                <div className="truncate text-base font-black text-black">
                   {formatName(player)}
-                  {player.isCloudUser && <span className="ml-2 text-sm">☁️</span>}
+                  {player.isCloudUser && <span className="ml-2 text-sm text-black/50">◈</span>}
                 </div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-black/50">
                   Player {index + 1}
                 </div>
               </div>
@@ -126,20 +126,20 @@ export default function PlayerSetupPanel({
                 <button
                   onClick={() => onMove(index, 'UP')}
                   disabled={index === 0}
-                  className="h-10 w-10 rounded-xl bg-slate-100 font-black text-slate-600 disabled:opacity-30 dark:bg-slate-800 dark:text-slate-300"
+                  className="h-10 w-10 rounded-none border border-black/20 bg-white font-black text-black/70 disabled:opacity-30"
                 >
                   ↑
                 </button>
                 <button
                   onClick={() => onMove(index, 'DOWN')}
                   disabled={index === activePlayers.length - 1}
-                  className="h-10 w-10 rounded-xl bg-slate-100 font-black text-slate-600 disabled:opacity-30 dark:bg-slate-800 dark:text-slate-300"
+                  className="h-10 w-10 rounded-none border border-black/20 bg-white font-black text-black/70 disabled:opacity-30"
                 >
                   ↓
                 </button>
                 <button
                   onClick={() => onRemove(player.id)}
-                  className="h-10 w-10 rounded-xl bg-red-50 font-black text-red-500 dark:bg-red-900/20 dark:text-red-400"
+                  className="h-10 w-10 rounded-none border border-black/20 bg-white font-black text-black"
                 >
                   ✕
                 </button>

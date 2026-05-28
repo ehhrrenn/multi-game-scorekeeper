@@ -64,7 +64,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           // Find the player's snapshot, or provide a fallback with ALL expected fields
           const snapshot = game.playerSnapshots.find(p => p.id === pId) || {
             name: 'Unknown',
-            emoji: '👤',
+            emoji: '☞',
             isCloudUser: false,
             photoURL: undefined,
             useCustomEmoji: false
@@ -225,7 +225,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
               <span className="text-sm w-5 h-5 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <Image src={p.photoURL} alt={p.name} width={20} height={20} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
-  <span>{p.emoji || '👤'}</span>
+  <span>{p.emoji || '☞'}</span>
 )}</span>
               <span className="max-w-[70px] truncate">{displayPlayerName(p)}</span>
               <span className="opacity-40 ml-0.5">|</span>
@@ -279,7 +279,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                     <span className="text-xl w-7 h-7 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
-  <span>{p.emoji || '👤'}</span>
+  <span>{p.emoji || '☞'}</span>
 )}</span>
                     <span className="font-bold text-slate-700 dark:text-slate-200">{displayPlayerName(p)}</span>
                   </div>
@@ -301,7 +301,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                         <div className="text-lg w-7 h-7 flex items-center justify-center overflow-hidden mx-auto">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
-  <span>{p.emoji || '👤'}</span>
+  <span>{p.emoji || '☞'}</span>
 )}</div>
                         <div className="text-[10px] font-bold uppercase text-slate-500 truncate max-w-[60px] mx-auto">{displayPlayerName(p)}</div>
                       </th>

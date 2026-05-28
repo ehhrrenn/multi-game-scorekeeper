@@ -219,7 +219,7 @@ return (
                     {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                       <Image src={p.photoURL} alt={p.name} width={56} height={56} unoptimized className="w-full h-full object-cover" />
                     ) : (
-                      <span>{p.emoji || '👤'}</span>
+                      <span>{p.emoji || '☞'}</span>
                     )}
                   </div>
                   

@@ -20,7 +20,7 @@ type Player = { id: string; name: string; emoji: string; photoURL?: string; isCl
 type PlayerSnapshot = Player;
 type ActiveCell = { roundIndex: number; playerId: string } | null;
 
-const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
+const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
 const DEFAULT_SETTINGS: FarkleSettings = { targetScore: 10000, roundCount: null };
 const DEFAULT_ROUND_COUNT = 10;
 const pseudoRandom = (seed: number) => {
@@ -868,7 +868,7 @@ export default function FarklePage() {
                                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
                                   <Image src={player.photoURL} alt={player.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" />
                                 ) : (
-                                  <span>{player.emoji || '👤'}</span>
+                                  <span>{player.emoji || '☞'}</span>
                                 )}
                               </div>
                               <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
@@ -1032,7 +1032,7 @@ export default function FarklePage() {
               {chasePromptInfo && (
                 <div className="mb-5 rounded-2xl border-2 border-amber-300 bg-gradient-to-b from-amber-50 to-orange-50 px-4 py-4 text-slate-900 shadow-sm dark:border-amber-700/80 dark:from-amber-900/30 dark:to-orange-900/20 dark:text-amber-100">
                   <p className="text-sm font-black tracking-[0.01em] text-amber-700 dark:text-amber-300">
-                    {displayPlayerName(players.find((p) => p.id === targetChaseState.leaderId) || { id: '', name: 'Player', emoji: '👤' })} has reached the target
+                    {displayPlayerName(players.find((p) => p.id === targetChaseState.leaderId) || { id: '', name: 'Player', emoji: '☞' })} has reached the target
                   </p>
                   <p className="mt-1 text-sm font-bold uppercase tracking-[0.08em] text-slate-700 dark:text-amber-200/90">
                     Score To Beat
@@ -1042,7 +1042,7 @@ export default function FarklePage() {
                   </p>
                   {chasePromptInfo.isCurrentLeader ? (
                     <p className="mt-2 text-base font-bold leading-snug text-slate-700 dark:text-amber-100/90">
-                      {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '👤' })} is currently leading. Everyone else must beat this score.
+                      {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '☞' })} is currently leading. Everyone else must beat this score.
                     </p>
                   ) : (
                     <>
@@ -1053,7 +1053,7 @@ export default function FarklePage() {
                         {chasePromptInfo.pointsNeededToPass.toLocaleString()}
                       </p>
                       <p className="mt-2 text-base font-bold leading-snug text-slate-700 dark:text-amber-100/90">
-                        {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '👤' })} must clear this number this turn.
+                        {displayPlayerName(players.find((p) => p.id === combinedPromptCell.playerId) || { id: '', name: 'Player', emoji: '☞' })} must clear this number this turn.
                       </p>
                     </>
                   )}
@@ -1099,7 +1099,7 @@ export default function FarklePage() {
           }}
           title={
             activeCell
-              ? `${displayPlayerName(players.find((p) => p.id === activeCell.playerId) || { id: '', name: 'Player', emoji: '👤' })} • Round ${activeCell.roundIndex + 1}`
+              ? `${displayPlayerName(players.find((p) => p.id === activeCell.playerId) || { id: '', name: 'Player', emoji: '☞' })} • Round ${activeCell.roundIndex + 1}`
               : ''
           }
           displayValue={String(numericInput)}
@@ -1348,7 +1348,7 @@ export default function FarklePage() {
       {activeEmojiPicker && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setActiveEmojiPicker(null)} />
-          <div className="relative grid max-w-sm grid-cols-5 gap-2 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 animate-in zoom-in-95 duration-200">
+          <div className="relative grid max-w-sm grid-cols-5 gap-2 rounded-none border border-black/20 bg-[#fbfbf8] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             {EMOJIS.map((emoji) => (
               <button
                 key={emoji}
@@ -1356,7 +1356,7 @@ export default function FarklePage() {
                   void updateEmoji(activeEmojiPicker, emoji);
                   setActiveEmojiPicker(null);
                 }}
-                className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-2xl transition active:scale-95 dark:bg-slate-800"
+                className="flex h-12 w-12 items-center justify-center rounded-none border border-black/20 bg-white text-2xl transition active:scale-95 hover:bg-black/5"
               >
                 {emoji}
               </button>

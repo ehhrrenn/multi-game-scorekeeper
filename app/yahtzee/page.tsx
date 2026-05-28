@@ -25,7 +25,7 @@ type YahtzeeScoreMap = Record<string, Record<string, (number | null)[]>>;
 type ActiveCell = { playerId: string; category: string; colIndex: number } | null;
 
 // --- Constants ---
-const EMOJIS = ['🦊', '⚡️', '🦖', '🤠', '👾', '🍕', '🚀', '🐙', '🦄', '🥑', '🔥', '💎', '👻', '👑', '😎', '🤖', '👽', '🐶', '🐱', '🐼'];
+const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
 
 const UPPER_CATEGORIES = [
   { id: 'ones', name: 'Ones' }, { id: 'twos', name: 'Twos' },
@@ -859,17 +859,17 @@ export default function YahtzeePage() {
       {/* Emoji Picker Modal */}
       {activeEmojiPicker && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+          <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-black text-slate-800 dark:text-white">Choose Emoji</h3>
-              <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all">✕</button>
+              <h3 className="text-xl font-black text-[#111]">Choose Emoji</h3>
+              <button onClick={() => setActiveEmojiPicker(null)} className="w-8 h-8 flex items-center justify-center bg-white border border-black/20 rounded-none text-black/70 hover:text-black active:scale-95 transition-all">✕</button>
             </div>
             <div className="grid grid-cols-5 gap-3">
               {EMOJIS.map(emoji => (
                 <button 
                   key={emoji} 
                   onClick={() => { updateEmoji(activeEmojiPicker, emoji); setActiveEmojiPicker(null); }}
-                  className="text-3xl aspect-square flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-2xl active:scale-90 transition-all shadow-sm dark:shadow-none"
+                  className="text-3xl aspect-square flex items-center justify-center bg-white border border-black/20 hover:bg-black/5 rounded-none active:scale-90 transition-all"
                 >
                   {emoji}
                 </button>

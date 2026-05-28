@@ -37,7 +37,7 @@ export function useAuth() {
         await upsertCloudPlayer(safeDb, {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || 'Anonymous Player',
-          emoji: existing?.emoji || '👤',
+          emoji: existing?.emoji || '☞',
           photoURL: existing?.photoURL || firebaseUser.photoURL || '',
           useCustomEmoji: existing?.useCustomEmoji || false,
           isCloudUser: true,
