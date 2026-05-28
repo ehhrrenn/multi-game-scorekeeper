@@ -457,7 +457,7 @@ export default function YahtzeePage() {
           {playingView === 'GRID' ? (
             <>
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
-                <div className="max-h-[calc(100dvh-21rem)] overflow-auto scrollbar-hide">
+                <div className="overflow-x-auto overflow-y-visible scrollbar-hide">
                   <table className="w-full table-fixed min-w-max">
                     <colgroup>
                       <col className="w-24" />
