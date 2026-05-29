@@ -1,7 +1,7 @@
 // lib/firebase.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
@@ -40,4 +40,18 @@ if (isFirebaseConfigured) {
 
 // Export the specific Firebase services we will be using
 export const auth: Auth | null = app ? getAuth(app) : null;
-export const db: Firestore | null = app ? getFirestore(app) : null;
+let firestore: Firestore | null = null;
+
+if (app) {
+  try {
+    // Some browsers/networks block Firestore's default streaming transport.
+    // This enables a more compatible transport strategy for listeners.
+    firestore = initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    });
+  } catch {
+    firestore = getFirestore(app);
+  }
+}
+
+export const db: Firestore | null = firestore;

@@ -44,6 +44,8 @@ type PlayerStats = {
   useCustomEmoji: boolean;
 };
 
+const DINGBATS = ['☞', '✤', '✦', '✷', '✶', '✳', '✲', '✚', '✱', '✦', '✧', '✥', '❖', '✪', '✺', '✹', '✸', '⚘', '⚜', '☙'];
+
 export default function RosterPage() {
   // 1. Cloud State
   const [cloudPlayers, setCloudPlayers] = useState<Player[]>([]);
@@ -170,19 +172,19 @@ export default function RosterPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#f6f6f2] text-[#111]">
+        <div className="h-12 w-12 border-2 border-black border-t-transparent animate-spin"></div>
       </div>
     );
   }
 
 return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
+    <div className="min-h-screen bg-[#f6f6f2] text-[#111] pb-32 transition-colors newsprint-page">
       
-      <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800">
+      <div className="sticky top-0 z-40 bg-[#fbfbf8]/95 backdrop-blur-md border-b-2 border-black/25 shadow-[0_4px_0_0_rgba(0,0,0,0.08)]">
         <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-black">All Players</h1>
-          <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
+          <h1 className="text-2xl font-black tracking-tight [font-family:Georgia,'Times_New_Roman',serif]">All Players</h1>
+          <span className="bg-white text-black px-3 py-1 rounded-none text-xs font-bold border border-black/20 uppercase tracking-[0.18em]">
             {allPlayers.length} Total Players
           </span>
         </div>
@@ -193,15 +195,15 @@ return (
         
         {/* Optional: If you ever want top-level Hero Stats for the whole roster, put the flex-box row here! */}
 
-        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-1 mt-2">
+        <h2 className="text-sm font-bold text-black/55 uppercase tracking-widest mb-3 ml-1 mt-2">
           Player Profiles
         </h2>
 
         {/* 3. MATCHING FEED / LIST VIEW */}
         {loading ? (
-          <div className="text-center p-8 text-slate-400 font-medium">Syncing Cloud Roster...</div>
+          <div className="text-center p-8 text-black/55 font-medium">Syncing Cloud Roster...</div>
         ) : playerStats.length === 0 ? (
-          <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8 text-center text-slate-500 font-medium border border-slate-200 dark:border-slate-700 border-dashed">
+          <div className="bg-[#fbfbf8] rounded-none p-8 text-center text-black/55 font-medium border-2 border-black/20 border-dashed">
             No players found. Start a game to add players!
           </div>
         ) : (
@@ -210,49 +212,49 @@ return (
               <Link 
                 key={p.playerId} 
                 href={`/roster/${p.playerId}`}
-                className="block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all"
+                className="block bg-[#fbfbf8] border-2 border-black/20 rounded-none p-4 shadow-[6px_6px_0_0_rgba(0,0,0,0.14)] hover:border-black active:translate-y-px transition-all"
               >
                 <div className="flex items-center gap-4 mb-4">
                   
                   {/* Matching Avatar Sizing */}
-                  <div className="w-14 h-14 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-3xl shadow-sm overflow-hidden flex-shrink-0">
+                  <div className="w-14 h-14 bg-white border border-black/20 rounded-none flex items-center justify-center text-3xl shadow-sm overflow-hidden flex-shrink-0">
                     {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                       <Image src={p.photoURL} alt={p.name} width={56} height={56} unoptimized className="w-full h-full object-cover" />
                     ) : (
-                      <span>{p.emoji || '☞'}</span>
+                      <span>{DINGBATS[p.playerId.charCodeAt(0) % DINGBATS.length] || p.emoji || '☞'}</span>
                     )}
                   </div>
                   
                   {/* Name and Topline Stats */}
                   <div className="flex-1 min-w-0">
-                    <div className="text-lg font-black flex items-center gap-2 truncate">
+                    <div className="text-lg font-black flex items-center gap-2 truncate [font-family:Georgia,'Times_New_Roman',serif]">
                       <span className="truncate">{p.isCloudUser ? formatFirstName(p.name) : p.name}</span>
-                      {p.isCloudUser && <span className="text-xs flex-shrink-0 text-blue-500">☁️</span>}
+                      {p.isCloudUser && <span className="text-xs flex-shrink-0 text-black/55">◈</span>}
                     </div>
-                    <div className="text-xs text-slate-400 dark:text-slate-500 font-bold truncate">
+                    <div className="text-xs text-black/55 font-bold truncate uppercase tracking-[0.12em]">
                       {p.gamesPlayed} games • {p.wins} wins • {(p.winRate * 100).toFixed(0)}%
                     </div>
                   </div>
                   
                   {/* Native iOS Chevron to imply clickability */}
-                  <div className="text-slate-300 dark:text-slate-600 pl-2">
-                    ❯
+                  <div className="text-black/35 pl-2 text-xl font-black">
+                    ▸
                   </div>
                 </div>
 
                 {/* Stat Pillars */}
                 <div className="flex gap-3 text-center">
-                  <div className="hidden sm:block flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl py-2">
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total</div>
-                    <div className="font-black text-slate-800 dark:text-slate-200">{p.totalPoints}</div>
+                  <div className="hidden sm:block flex-1 bg-white rounded-none py-2 border border-black/10">
+                    <div className="text-[10px] text-black/55 font-bold uppercase tracking-wider">Total</div>
+                    <div className="font-black text-black">{p.totalPoints}</div>
                   </div>
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl py-2">
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Avg</div>
-                    <div className="font-black text-slate-800 dark:text-slate-200">{p.avgPoints.toFixed(0)}</div>
+                  <div className="flex-1 bg-white rounded-none py-2 border border-black/10">
+                    <div className="text-[10px] text-black/55 font-bold uppercase tracking-wider">Avg</div>
+                    <div className="font-black text-black">{p.avgPoints.toFixed(0)}</div>
                   </div>
-                  <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl py-2">
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Best</div>
-                    <div className="font-black text-emerald-600 dark:text-emerald-400">{p.bestScore}</div>
+                  <div className="flex-1 bg-white rounded-none py-2 border border-black/10">
+                    <div className="text-[10px] text-black/55 font-bold uppercase tracking-wider">Best</div>
+                    <div className="font-black text-black">{p.bestScore}</div>
                   </div>
                 </div>
               </Link>

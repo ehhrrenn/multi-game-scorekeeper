@@ -16,7 +16,7 @@ import GameCard, { GameRecord } from '../../components/GameCard';
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean; isCloudUser?: boolean; useCustomEmoji?: boolean };
 
-const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
+const EMOJIS = ['☞', '✤', '✦', '✷', '✶', '✳', '✲', '✚', '✱', '✧', '✥', '❖', '✪', '✺', '✹', '✸', '⚘', '⚜', '☙', '☘'];
 
 export default function PlayerProfilePage() {
   const params = useParams();
@@ -161,6 +161,9 @@ export default function PlayerProfilePage() {
 
   const width = 400; const height = 120;
   const max = Math.max(...stats.graphData, 10); const min = Math.min(...stats.graphData, 0); const range = max - min || 1;
+  const graphPadding = 10;
+  const graphWidth = width - graphPadding * 2;
+  const graphHeight = height - graphPadding * 2;
 
   // Handlers
 const handleEditClick = useCallback(() => {
@@ -313,8 +316,8 @@ const handleDelete = async () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-slate-50 dark:bg-slate-950">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#f6f6f2] text-[#111]">
+        <div className="h-12 w-12 border-2 border-black border-t-transparent animate-spin"></div>
       </div>
     );
   }
@@ -322,23 +325,23 @@ const handleDelete = async () => {
   if (!player) return null;
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
+    <main className="min-h-screen bg-[#f6f6f2] text-[#111] pb-32 transition-colors newsprint-page">
       
       {/* Existing Delete Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="text-4xl text-center mb-4">🗑️</div>
-            <h3 className="text-2xl font-black mb-2 text-slate-800 dark:text-white text-center">Delete Player?</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-center mb-8 leading-relaxed font-medium">
+          <div className="absolute inset-0 bg-black/60 animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="relative w-full max-w-sm bg-[#f7f5ee] border-[3px] border-black rounded-none p-8 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-200">
+            <div className="text-4xl text-center mb-4">✕</div>
+            <h3 className="text-2xl font-black mb-2 text-[#111] text-center uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Delete Player?</h3>
+            <p className="text-black/70 text-center mb-8 leading-relaxed font-semibold">
               This will permanently remove <span className="font-bold text-slate-700 dark:text-slate-200">{player.isCloudUser ? formatFirstName(player.name) : player.name}</span> from the roster, but their history will remain safe in the vault.
             </p>
             <div className="flex flex-col gap-3">
-              <button onClick={handleDelete} className="w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 dark:shadow-none active:scale-95 transition">
+              <button onClick={handleDelete} className="w-full bg-black text-white py-4 rounded-none font-black uppercase tracking-[0.08em] border border-black active:translate-y-px transition">
                 Yes, Delete
               </button>
-              <button onClick={() => setShowDeleteConfirm(false)} className="w-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold py-3 mt-2">
+              <button onClick={() => setShowDeleteConfirm(false)} className="w-full text-black/60 hover:text-black font-bold uppercase tracking-[0.1em] py-3 mt-2">
                 Cancel
               </button>
             </div>
@@ -349,17 +352,17 @@ const handleDelete = async () => {
       {/* --- NEW: Admin Merge Modal --- */}
       {showMergeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in" onClick={() => !isMerging && setShowMergeModal(false)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <h3 className="text-xl font-black mb-2 text-slate-800 dark:text-white">Admin Merge</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+          <div className="absolute inset-0 bg-black/60 animate-in fade-in" onClick={() => !isMerging && setShowMergeModal(false)} />
+          <div className="relative w-full max-w-sm bg-[#f7f5ee] border-[3px] border-black rounded-none p-6 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black mb-2 text-[#111] uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Admin Merge</h3>
+            <p className="text-sm text-black/70 mb-6 leading-relaxed font-semibold">
               Move all of <b>{player.isCloudUser ? formatFirstName(player.name) : player.name}&apos;s</b> history into a synced Cloud Account. This cannot be undone.
             </p>
             
             <select 
               value={targetMergeId} 
               onChange={e => setTargetMergeId(e.target.value)}
-              className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 mb-6 font-bold text-slate-800 dark:text-white outline-none"
+              className="w-full bg-white border border-black/20 rounded-none px-4 py-3 mb-6 font-bold text-black outline-none"
             >
               <option value="" disabled>Select target account...</option>
               {allCloudUsers.map(u => (
@@ -368,15 +371,15 @@ const handleDelete = async () => {
             </select>
 
             <div className="flex gap-2">
-              <button onClick={() => setShowMergeModal(false)} disabled={isMerging} className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-3 rounded-xl">
+              <button onClick={() => setShowMergeModal(false)} disabled={isMerging} className="flex-1 bg-white border border-black/20 text-black/70 font-bold py-3 rounded-none uppercase tracking-[0.08em]">
                 Cancel
               </button>
               <button 
                 onClick={executeMerge} 
                 disabled={!targetMergeId || isMerging} 
-                className="flex-1 bg-purple-600 text-white font-black py-3 rounded-xl disabled:opacity-50 flex justify-center items-center"
+                className="flex-1 bg-black text-white font-black py-3 rounded-none uppercase tracking-[0.08em] disabled:opacity-50 flex justify-center items-center"
               >
-                {isMerging ? <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div> : 'Confirm Merge'}
+                {isMerging ? <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin"></div> : 'Confirm Merge'}
               </button>
             </div>
           </div>
@@ -384,25 +387,25 @@ const handleDelete = async () => {
       )}
 
       {/* Sticky Header */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-        <h1 className="text-xl font-black text-slate-800 dark:text-white">Player Profile</h1>
+      <div className="fixed top-0 left-0 right-0 h-16 bg-[#fbfbf8]/95 backdrop-blur-md border-b-2 border-black/25 shadow-[0_4px_0_0_rgba(0,0,0,0.08)] z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <h1 className="text-xl font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Player Profile</h1>
         <div className="flex gap-2">
           {/* Admin Context Menu */}
           {isAdmin && !player.isCloudUser && (
-            <button onClick={handleOpenMergeModal} className="w-10 h-10 flex items-center justify-center bg-purple-100 dark:bg-purple-900/20 text-purple-600 rounded-full text-sm font-bold active:scale-95 transition">
-              🔗
+            <button onClick={handleOpenMergeModal} className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-none border border-black/20 text-sm font-bold active:translate-y-px transition">
+              ❖
             </button>
           )}
 
           {isEditing ? (
             <>
-              <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-sm font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full">Cancel</button>
-              <button onClick={handleSave} className="px-4 py-1.5 text-sm font-bold text-white bg-blue-600 rounded-full shadow-sm">Save</button>
+              <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-sm font-bold text-black/60 bg-white border border-black/20 rounded-none uppercase tracking-[0.08em]">Cancel</button>
+              <button onClick={handleSave} className="px-4 py-1.5 text-sm font-bold text-white bg-black rounded-none shadow-sm uppercase tracking-[0.08em]">Save</button>
             </>
           ) : (
             <>
-              <button onClick={handleEditClick} className="w-10 h-10 flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full text-lg active:scale-95 transition">✏️</button>
-              <button onClick={() => setShowDeleteConfirm(true)} className="w-10 h-10 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full text-lg active:scale-95 transition">🗑️</button>
+              <button onClick={handleEditClick} className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-none border border-black/20 text-lg active:translate-y-px transition">✎</button>
+              <button onClick={() => setShowDeleteConfirm(true)} className="w-10 h-10 flex items-center justify-center bg-white text-black rounded-none border border-black/20 text-lg active:translate-y-px transition">✕</button>
             </>
           )}
         </div>
@@ -413,11 +416,11 @@ const handleDelete = async () => {
         {/* Top Context Filter */}
         {allHistory.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide">
-            <button onClick={() => setFilterGame('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === 'ALL' ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
+            <button onClick={() => setFilterGame('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-none text-xs font-bold uppercase tracking-[0.08em] transition-all border ${filterGame === 'ALL' ? 'bg-black text-white border-black' : 'bg-white text-black/60 border-black/20'}`}>
               All Games
             </button>
             {uniqueGames.map(name => (
-              <button key={name} onClick={() => setFilterGame(name)} className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${filterGame === name ? 'bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 shadow-sm' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}`}>
+              <button key={name} onClick={() => setFilterGame(name)} className={`whitespace-nowrap px-4 py-1.5 rounded-none text-xs font-bold uppercase tracking-[0.08em] transition-all border ${filterGame === name ? 'bg-black text-white border-black' : 'bg-white text-black/60 border-black/20'}`}>
                 {name}
               </button>
             ))}
@@ -425,36 +428,35 @@ const handleDelete = async () => {
         )}
 
         {/* Hero Dossier Card */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm relative overflow-hidden mb-8">
+        <div className="bg-[#f7f5ee] p-6 rounded-none border-[3px] border-black relative overflow-hidden mb-8 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)]">
           {player.isCloudUser && (
-            <div className="absolute top-0 right-0 bg-blue-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl z-10 shadow-sm">
+            <div className="absolute top-0 right-0 bg-black text-white text-[10px] font-bold px-3 py-1 rounded-none z-10 shadow-sm uppercase tracking-[0.16em]">
               CLOUD SYNCED
             </div>
           )}
           
-          <div className="absolute -right-6 -bottom-6 text-9xl opacity-[0.03] dark:opacity-5 select-none pointer-events-none">
-            {isEditing ? editEmoji : player.emoji}
+          <div className="absolute -right-6 -bottom-6 text-9xl opacity-[0.04] select-none pointer-events-none">
+            {isEditing ? editEmoji : player.emoji || '✤'}
           </div>
           
           <div className="relative z-10 flex items-center gap-5">
             {isEditing ? (
               <button 
                 onClick={() => setShowEmojiPicker(true)}
-                className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border-2 border-slate-200 dark:border-slate-700 border-dashed rounded-full flex items-center justify-center text-4xl active:scale-95 transition shadow-inner relative"
+                className="w-20 h-20 shrink-0 bg-white border-2 border-black border-dashed rounded-none flex items-center justify-center text-4xl active:translate-y-px transition shadow-inner relative"
               >
                 {(!editUseCustomEmoji && player.photoURL) ? (
-                  <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
+                  <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border-2 border-black shadow-sm object-cover" />
                 ) : (
                   <>{editEmoji || '☞'}</>
                 )}
-                <div className="absolute -bottom-1 bg-slate-800 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Tap</div>
               </button>
             ) : (
               player.photoURL && !player.useCustomEmoji ? (
-                <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-full border-2 border-white dark:border-slate-800 shadow-sm object-cover" />
+                <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border-2 border-black shadow-sm object-cover" />
               ) : (
-                <div className="w-20 h-20 shrink-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 rounded-full flex items-center justify-center text-4xl shadow-sm dark:shadow-none">
-                  {player.emoji}
+                <div className="w-20 h-20 shrink-0 bg-white border border-black/20 rounded-none flex items-center justify-center text-4xl shadow-sm">
+                  {player.emoji || '✤'}
                 </div>
               )
             )}
@@ -465,50 +467,52 @@ const handleDelete = async () => {
                   type="text" 
                   value={editName} 
                   onChange={e => setEditName(e.target.value)} 
-                  className="bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-black text-2xl text-slate-800 dark:text-white outline-none focus:border-blue-500 w-full"
+                  className="bg-white border border-black/20 rounded-none px-3 py-2 font-black text-2xl text-black outline-none focus:border-black w-full [font-family:Georgia,'Times_New_Roman',serif]"
                   autoFocus
                 />
               ) : (
-                <h1 className="text-3xl font-black text-slate-800 dark:text-white truncate">{player.isCloudUser ? formatFirstName(player.name) : player.name}</h1>
+                <h1 className="text-3xl font-black text-[#111] truncate [font-family:Georgia,'Times_New_Roman',serif]">{player.isCloudUser ? formatFirstName(player.name) : player.name}</h1>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mt-6 border-t border-slate-100 dark:border-slate-800 pt-6">
+          <div className="grid grid-cols-3 gap-3 mt-6 border-t-2 border-black pt-6">
              <div className="text-center">
-                <div className="text-2xl mb-1">🎲</div>
-                <div className="font-black text-xl text-slate-800 dark:text-white">{stats.gamesPlayed}</div>
-                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Games</div>
+                <div className="text-2xl mb-1">✶</div>
+                <div className="font-black text-xl text-black">{stats.gamesPlayed}</div>
+                <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest">Games</div>
              </div>
-             <div className="text-center border-l border-slate-100 dark:border-slate-800">
-                <div className="text-2xl mb-1">🏆</div>
-                <div className="font-black text-xl text-slate-800 dark:text-white">{stats.wins}</div>
-                <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">Wins</div>
+             <div className="text-center border-l border-black/10">
+                <div className="text-2xl mb-1">✪</div>
+                <div className="font-black text-xl text-black">{stats.wins}</div>
+                <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest">Wins</div>
              </div>
-             <div className="text-center border-l border-slate-100 dark:border-slate-800">
-                <div className="text-2xl mb-1">🤡</div>
-                <div className="font-black text-xl text-slate-800 dark:text-white">{stats.lastPlaces}</div>
-                <div className="text-[9px] font-bold text-red-400 uppercase tracking-widest">Last Place</div>
+             <div className="text-center border-l border-black/10">
+                <div className="text-2xl mb-1">✕</div>
+                <div className="font-black text-xl text-black">{stats.lastPlaces}</div>
+                <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest">Last Place</div>
              </div>
           </div>
         </div>
 
         {/* Dynamic SVG Score Graph */}
         {stats.graphData.length > 1 && (
-          <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mb-8">
-            <h3 className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Score Trend</h3>
+          <div className="bg-[#f7f5ee] p-5 rounded-none border-[3px] border-black shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] mb-8">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+              <rect x="0" y="0" width={width} height={height} fill="none" stroke="rgba(0,0,0,0.85)" strokeWidth="2" />
+              <line x1={graphPadding} y1={height - graphPadding} x2={width - graphPadding} y2={height - graphPadding} stroke="rgba(0,0,0,0.35)" strokeWidth="1.5" />
+              <line x1={graphPadding} y1={graphPadding} x2={graphPadding} y2={height - graphPadding} stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" />
               <polyline 
                 points={stats.graphData.map((val, i) => { 
-                  const x = (i / Math.max(stats.graphData.length - 1, 1)) * width; 
-                  const y = height - ((val - min) / range) * height; 
+                  const x = graphPadding + (i / Math.max(stats.graphData.length - 1, 1)) * graphWidth; 
+                  const y = graphPadding + (1 - ((val - min) / range)) * graphHeight; 
                   return `${x},${y}`; 
                 }).join(' ')} 
                 fill="none" 
-                stroke="#3b82f6" 
-                strokeWidth="4" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+                stroke="#111" 
+                strokeWidth="3.5" 
+                strokeLinecap="square" 
+                strokeLinejoin="miter" 
                 className="drop-shadow-sm" 
               />
             </svg>
@@ -524,7 +528,7 @@ const handleDelete = async () => {
         
         <div className="grid gap-3 pb-8">
           {filteredGames.length === 0 ? (
-            <div className="text-center p-6 text-slate-400 dark:text-slate-500 font-medium border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+            <div className="text-center p-6 text-black/55 font-medium border-2 border-dashed border-black/20 rounded-none bg-[#fbfbf8]">
               No games match this filter.
             </div>
           ) : (

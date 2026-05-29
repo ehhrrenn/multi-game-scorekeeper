@@ -187,10 +187,10 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
   })();
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
+    <div className="bg-[#fbfbf8] border-2 border-black/20 rounded-none shadow-[6px_6px_0_0_rgba(0,0,0,0.14)] overflow-hidden transition-all duration-300">
       
-      <div onClick={onToggle} className="p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col gap-3 relative group">
-        <div className="absolute top-4 right-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 transition-colors">
+      <div onClick={onToggle} className="p-4 cursor-pointer hover:bg-black/5 transition-colors flex flex-col gap-3 relative group">
+        <div className="absolute top-4 right-4 text-black/35 group-hover:text-black/55 transition-colors">
           {isExpanded ? (
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
           ) : (
@@ -200,32 +200,31 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
 
         <div className="flex justify-between items-start pr-8">
           <div>
-            <h3 className="font-black text-slate-800 dark:text-white text-lg">{game.gameName}</h3>
-            <p className="text-xs font-bold text-slate-400">{formattedDate}</p>
+            <h3 className="font-black text-[#111] text-lg [font-family:Georgia,'Times_New_Roman',serif]">{game.gameName}</h3>
+            <p className="text-xs font-bold text-black/55 uppercase tracking-[0.12em]">{formattedDate}</p>
           </div>
           {isComplete ? (
-            <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg text-right">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Winner</p>
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate max-w-[120px]">
+            <div className="bg-white px-3 py-1.5 rounded-none border border-black/10 text-right">
+              <p className="text-[10px] font-bold text-black/55 uppercase tracking-widest mb-0.5">Winner</p>
+              <p className="text-sm font-bold text-black truncate max-w-[120px]">
                 {winnerNames || 'Draw'}
               </p>
             </div>
           ) : (
-            <div className="bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg text-right border border-amber-200 dark:border-amber-900/40">
-              <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-0.5">Status</p>
-              <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Incomplete</p>
+            <div className="bg-white px-3 py-1.5 rounded-none text-right border border-black/10">
+              <p className="text-[10px] font-bold text-black/55 uppercase tracking-widest mb-0.5">Status</p>
+              <p className="text-sm font-bold text-black">Incomplete</p>
             </div>
           )}
         </div>
         
-        {/* ADDED PLAYER NAMES TO COLLAPSED PILLS */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="pt-3 border-t border-black/10 flex gap-2 overflow-x-auto scrollbar-hide">
           {standings.map(p => (
-            <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold whitespace-nowrap ${isComplete && winners.some(w => w.id === p.id) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+            <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-none border text-xs font-bold whitespace-nowrap ${isComplete && winners.some(w => w.id === p.id) ? 'bg-white text-black border-black/20' : 'bg-white text-black/65 border-black/10'}`}>
               <span className="text-sm w-5 h-5 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
   <Image src={p.photoURL} alt={p.name} width={20} height={20} unoptimized className="w-full h-full object-cover rounded-full" />
 ) : (
-  <span>{p.emoji || '☞'}</span>
+  <span>{p.emoji || '✤'}</span>
 )}</span>
               <span className="max-w-[70px] truncate">{displayPlayerName(p)}</span>
               <span className="opacity-40 ml-0.5">|</span>
@@ -236,26 +235,26 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
       </div>
 
       {isExpanded && (
-        <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800 animate-in slide-in-from-top-4 fade-in duration-300">
+        <div className="px-4 pb-4 pt-2 border-t border-black/10 animate-in slide-in-from-top-4 fade-in duration-300">
           
           <div className="flex gap-2 mb-5">
             {/* CHANGED RESUME TO EDIT */}
-            <button onClick={handleResume} className="flex-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-bold py-2 rounded-xl text-sm transition-all active:scale-95">
-              ✏️ Edit Game
+            <button onClick={handleResume} className="flex-1 bg-white text-black font-bold py-2 rounded-none text-sm border border-black/20 transition-all active:translate-y-px uppercase tracking-[0.08em]">
+              ✎ Edit Game
             </button>
             {canFinish && (
-              <button onClick={onFinish} className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
-                ✅ Finish & Close
+              <button onClick={onFinish} className="bg-white text-black font-bold px-4 rounded-none text-sm border border-black/20 transition-all active:translate-y-px uppercase tracking-[0.08em]">
+                ✓ Finish & Close
               </button>
             )}
-            <button onClick={handleShare} className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
-              📤 Share
+            <button onClick={handleShare} className="bg-white text-black font-bold px-4 rounded-none text-sm border border-black/20 transition-all active:translate-y-px uppercase tracking-[0.08em]">
+              ↗ Share
             </button>
 
             {showDeleteConfirm ? (
               <div className="flex gap-1 animate-in fade-in slide-in-from-right-2">
-                <button onClick={confirmDelete} className="bg-red-500 text-white font-bold px-3 rounded-xl text-xs transition-all active:scale-95 shadow-sm shadow-red-500/20">Delete</button>
-                <button onClick={cancelDelete} className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold px-3 rounded-xl text-xs transition-all active:scale-95">Cancel</button>
+                <button onClick={confirmDelete} className="bg-black text-white font-bold px-3 rounded-none text-xs transition-all active:translate-y-px uppercase tracking-[0.08em] border border-black">Delete</button>
+                <button onClick={cancelDelete} className="bg-white text-black font-bold px-3 rounded-none text-xs transition-all active:translate-y-px uppercase tracking-[0.08em] border border-black/20">Cancel</button>
               </div>
             ) : (
               <button onClick={handleDeleteClick} className="bg-red-50 dark:bg-red-900/20 text-red-500 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
