@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, type Firestore } from 'firebase/firestore';
 import { useGameState } from './useGameState';
 import { db } from '../lib/firebase';
 import {
@@ -37,14 +37,15 @@ export function useGameProfilesSync() {
     if (!db) {
       return;
     }
+    const firestore: Firestore = db;
 
     let cancelled = false;
 
     async function syncFromCloud() {
       try {
         const [cloudProfiles, gamesSnapshot] = await Promise.all([
-          fetchCloudGameProfiles(db),
-          getDocs(collection(db, 'Games'))
+          fetchCloudGameProfiles(firestore),
+          getDocs(collection(firestore, 'Games'))
         ]);
 
         const cloudHistory = gamesSnapshot.docs.map((snap) => snap.data() as GameRecord);
@@ -63,7 +64,7 @@ export function useGameProfilesSync() {
         const cloudMap = new Map(cloudProfiles.map((profile) => [profile.name.toLowerCase(), serializeProfiles([profile])]));
         const toUpsert = merged.filter((profile) => cloudMap.get(profile.name.toLowerCase()) !== serializeProfiles([profile]));
         if (toUpsert.length) {
-          await upsertCloudGameProfiles(db, toUpsert);
+          await upsertCloudGameProfiles(firestore, toUpsert);
         }
       } catch (error) {
         console.error('Error syncing game profiles:', error);
