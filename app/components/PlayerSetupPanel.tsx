@@ -49,7 +49,7 @@ export default function PlayerSetupPanel({
 
       <div className="mb-2 flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
         {isLoading ? (
-          <div className="whitespace-nowrap shrink-0 rounded-full border border-black/20 bg-white px-4 py-2.5 text-sm font-bold text-black/50">
+          <div className="whitespace-nowrap shrink-0 rounded-none border border-black/20 bg-white px-4 py-2.5 text-sm font-bold text-black/50">
             Loading roster...
           </div>
         ) : (
@@ -57,7 +57,7 @@ export default function PlayerSetupPanel({
             <button
               key={player.id}
               onClick={() => onAddFromRoster(player)}
-              className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold bg-white text-black/80 border border-black/20 hover:border-black transition-all flex items-center gap-2 active:scale-95"
+              className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-none text-sm font-bold bg-white text-black/80 border border-black/20 hover:border-black transition-all flex items-center gap-2 active:scale-95"
             >
               <span className="w-5 h-5 flex items-center justify-center flex-shrink-0 overflow-hidden rounded-full">
                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
@@ -73,7 +73,7 @@ export default function PlayerSetupPanel({
         )}
         <button
           onClick={onNewPlayerClick}
-          className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-full text-sm font-bold text-black bg-white border border-black/20 transition-all hover:border-black"
+          className="whitespace-nowrap shrink-0 px-4 py-2.5 rounded-none text-sm font-black uppercase tracking-[0.08em] text-white bg-black border border-black transition-colors hover:bg-white hover:text-black"
         >
           + New Player
         </button>
@@ -85,11 +85,6 @@ export default function PlayerSetupPanel({
         <h2 className="text-sm font-bold uppercase tracking-widest text-black/55">
           Active Players
         </h2>
-        {onClearSetup && activePlayers.length > 0 && (
-          <button onClick={onClearSetup} className="text-sm font-bold text-black/65 hover:text-black">
-            Clear Setup
-          </button>
-        )}
       </div>
 
       <div className="space-y-3">
@@ -148,6 +143,15 @@ export default function PlayerSetupPanel({
           ))
         )}
       </div>
+
+      {onClearSetup && activePlayers.length > 0 && (
+        <button
+          onClick={onClearSetup}
+          className="mt-6 w-full border border-black/30 bg-black py-3.5 text-sm font-black uppercase tracking-[0.12em] text-white transition-colors active:bg-white active:text-black"
+        >
+          Clear Setup
+        </button>
+      )}
     </>
   );
 }

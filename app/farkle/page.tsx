@@ -261,6 +261,17 @@ export default function FarklePage() {
     settings.roundCount || 0,
     completedRoundCount + (isGameComplete ? 0 : 1)
   );
+  const graphLineStyles = useMemo(() => {
+    const shades = ['#111111', '#2e2e2e', '#4a4a4a', '#666666', '#7a7a7a', '#909090', '#3a3a3a', '#555555'];
+    const widths = [4, 3.5, 3.5, 3, 3, 2.5, 2.5, 2];
+    const dashes = ['', '10 6', '4 4', '14 6 2 6', '2 4', '12 4', '8 3 2 3', '1 4'];
+
+    return players.map((_, index) => ({
+      stroke: shades[index % shades.length],
+      strokeWidth: widths[index % widths.length],
+      strokeDasharray: dashes[index % dashes.length]
+    }));
+  }, [players]);
   const persistSessionToHistory = async (session: ActiveSession) => {
     let gameRecord: GameRecord | null = null;
 
@@ -788,7 +799,7 @@ export default function FarklePage() {
 
   if (phase === 'PLAYING') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[320px] font-sans text-slate-800 dark:text-slate-200">
+      <div className="min-h-screen bg-[#f6f6f2] pb-[320px] font-sans text-black">
         {showCelebration && (
           <div className="fixed inset-0 z-[120] pointer-events-none overflow-hidden">
             <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-500 flex items-center justify-center">
@@ -815,10 +826,10 @@ export default function FarklePage() {
           </div>
         )}
 
-        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
           <div className="min-w-0 pr-4">
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate">{mode === 'stealing' ? 'Farkle Stealing' : 'Farkle'}</h1>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 truncate">
+            <h1 className="text-2xl font-black text-[#111] truncate [font-family:Georgia,'Times_New_Roman',serif]">{mode === 'stealing' ? 'Farkle Stealing' : 'Farkle'}</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-black/55 truncate">
               {usesRoundWinCondition
                 ? `First through ${settings.roundCount} rounds • Round ${currentRoundIndex + 1}`
                 : targetChaseState.chaseActive
@@ -827,27 +838,23 @@ export default function FarklePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowDiceRoller(true)} className="h-9 px-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-sm font-bold active:scale-95 transition gap-1">🎲 <span className="hidden sm:inline">Roll</span></button>
-            <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+            <button onClick={() => setShowDiceRoller(true)} className="h-10 px-3 bg-white border border-black/20 text-black rounded-none flex items-center justify-center text-sm font-bold active:scale-95 transition gap-1.5"><span className="text-xl leading-none">⚂</span> <span>Roll Dice</span></button>
+            <button onClick={() => setPhase('SETUP')} className="h-10 px-3 bg-white border border-black/20 text-black rounded-none flex items-center justify-center text-sm font-bold active:scale-95 transition">Game Setup</button>
           </div>
         </div>
 
         <main className="max-w-screen-md mx-auto px-4 pt-16">
-          <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
-                🧮 Score Grid
-              </button>
-              <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
-                📈 Live Graph
-              </button>
+          <div className="sticky top-16 z-40 bg-[#f6f6f2]/95 backdrop-blur-md pt-2 pb-3 mb-3">
+            <div className="flex bg-white border border-black/20 p-1 rounded-none">
+              <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Score Grid</button>
+              <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Live Graph</button>
             </div>
           </div>
 
           {playingView === 'GRID' ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-6">
+            <div className="bg-white border border-black/20 rounded-none overflow-hidden mb-6">
               <div className="overflow-x-auto overflow-y-visible scrollbar-hide">
-                <table className="w-full table-fixed min-w-max">
+                <table className="w-full table-fixed min-w-max border-collapse [&_thead_th]:border [&_thead_th]:border-black/10 [&_tbody_td]:border [&_tbody_td]:border-black/10">
                   <colgroup>
                     <col className="w-16" />
                     {players.map((player) => (
@@ -856,22 +863,22 @@ export default function FarklePage() {
                   </colgroup>
                   <thead>
                     <tr>
-                      <th className="w-16 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="w-16 sticky left-0 top-0 z-30 bg-[#f6f6f2]/95 backdrop-blur-md py-3 text-xs font-bold text-black/55 uppercase tracking-wider">
                         Rnd
                       </th>
                       {players.map((player, index) => {
                         const isCurrentPlayer = index === currentPlayerIndex && !isGameComplete;
                         return (
-                          <th key={player.id} className={`w-28 sticky top-0 z-20 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3 ${isCurrentPlayer ? 'bg-blue-50/95 dark:bg-blue-900/30' : 'bg-white/95 dark:bg-slate-900/95'}`}>
+                          <th key={player.id} className={`w-28 sticky top-0 z-20 backdrop-blur-md p-3 ${isCurrentPlayer ? 'bg-black/5' : 'bg-white/95'}`}>
                             <div className="flex flex-col items-center gap-1">
-                              <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
+                              <div className="w-10 h-10 bg-[#f6f6f2] border border-black/20 rounded-none flex items-center justify-center text-xl overflow-hidden">
                                 {player.isCloudUser && player.photoURL && !player.useCustomEmoji ? (
-                                  <Image src={player.photoURL} alt={player.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-full" />
+                                  <Image src={player.photoURL} alt={player.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-none" />
                                 ) : (
                                   <span>{player.emoji || '☞'}</span>
                                 )}
                               </div>
-                              <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
+                              <div className="text-[11px] font-black text-black uppercase tracking-wide truncate w-full text-center">
                                 {displayPlayerName(player)}
                               </div>
                             </div>
@@ -882,8 +889,8 @@ export default function FarklePage() {
                   </thead>
                   <tbody>
                     {Array.from({ length: visibleRoundCount }).map((_, roundIndex) => (
-                      <tr key={roundIndex} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                        <td className="w-16 p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50 text-center text-sm font-bold text-slate-500 dark:text-slate-400 sticky left-0 z-10">
+                      <tr key={roundIndex} className="bg-white">
+                        <td className="w-16 p-2 align-middle bg-[#f6f6f2] text-center text-sm font-bold text-black/65 sticky left-0 z-10">
                           {roundIndex + 1}
                         </td>
                         {players.map((player) => {
@@ -895,15 +902,15 @@ export default function FarklePage() {
                             <td
                               key={`${player.id}-${roundIndex}`}
                               onClick={() => editable && openScoreEntry(roundIndex, player.id)}
-                              className={`relative w-28 border-l border-slate-50 dark:border-slate-800 p-3 text-center align-middle transition ${editable ? 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-800' : 'cursor-default'} ${isCurrent ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-inset ring-blue-500' : ''}`}
+                              className={`relative w-28 p-3 text-center align-middle transition ${editable ? 'cursor-pointer active:bg-black/5' : 'cursor-default'} ${isCurrent ? 'bg-black/5 ring-2 ring-inset ring-black' : ''}`}
                             >
                               {score !== null ? (
                                 <div className="flex flex-col items-center justify-center gap-1">
-                                  <span className={`text-xl font-black ${isBust ? 'text-red-500 dark:text-red-400' : 'text-slate-800 dark:text-white'}`}>{score}</span>
+                                  <span className={`text-xl font-black ${isBust ? 'text-black/70' : 'text-black'}`}>{score}</span>
                                   {isBust && <span className="text-lg leading-none">💥</span>}
                                 </div>
                               ) : (
-                                <span className={`text-xl font-black ${isCurrent ? 'text-blue-500 dark:text-blue-300' : 'text-slate-200 dark:text-slate-700'}`}>{isCurrent ? '•' : '-'}</span>
+                                <span className={`text-xl font-black ${isCurrent ? 'text-black' : 'text-black/20'}`}>{isCurrent ? '•' : '-'}</span>
                               )}
                             </td>
                           );
@@ -911,14 +918,14 @@ export default function FarklePage() {
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-slate-800 dark:bg-slate-200 text-white border-t dark:border-slate-700">
+                  <tfoot className="bg-black text-white border-t border-black">
                     <tr>
-                      <td className="w-16 p-4 font-bold border-r border-slate-700 dark:border-slate-300 text-xs uppercase opacity-60 text-center sticky left-0 z-10 bg-slate-800 dark:bg-slate-200">Tot</td>
+                      <td className="w-16 p-4 font-bold border-r border-white/10 text-xs uppercase opacity-60 text-center sticky left-0 z-10 bg-black">Tot</td>
                       {players.map((player) => {
                         const total = totalScores[player.id] || 0;
                         const hasWon = isGameComplete && total === highestTotal;
                         return (
-                          <td key={`${player.id}-total`} className={`w-28 p-4 text-center text-xl font-black ${hasWon ? 'text-emerald-300 dark:text-emerald-600' : ''}`}>
+                          <td key={`${player.id}-total`} className={`w-28 p-4 text-center text-xl font-black ${hasWon ? 'text-white' : ''}`}>
                             {total}
                           </td>
                         );
@@ -929,87 +936,162 @@ export default function FarklePage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden mb-6 animate-in fade-in">
-              <svg viewBox={`0 -20 480 240`} className="w-full h-auto overflow-visible">
-                {(() => {
-                  const pointsData = players.map((player) => {
-                    let runningTotal = 0;
-                    const points = [0];
-                    for (let roundIndex = 0; roundIndex < visibleRoundCount; roundIndex += 1) {
-                      const roundScore = getRoundScore(player.id, roundIndex);
-                      runningTotal += roundScore ?? 0;
-                      points.push(runningTotal);
+            <div className="animate-in fade-in mb-6">
+              <div className="mb-4 flex flex-wrap justify-center gap-3 border border-black/20 bg-[#fbfbf8] p-3 rounded-none">
+                {players.map((player, index) => (
+                  <div key={player.id} className="flex items-center gap-2 border border-black/20 bg-white px-2 py-1 text-sm font-bold rounded-none">
+                    <svg width="28" height="12" viewBox="0 0 28 12" aria-hidden="true">
+                      <line
+                        x1="1"
+                        y1="6"
+                        x2="27"
+                        y2="6"
+                        stroke={graphLineStyles[index]?.stroke}
+                        strokeWidth={graphLineStyles[index]?.strokeWidth}
+                        strokeDasharray={graphLineStyles[index]?.strokeDasharray || undefined}
+                        strokeLinecap="butt"
+                      />
+                    </svg>
+                    <span>{displayPlayerName(player)}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-hidden border border-black/20 bg-white p-4 rounded-none">
+                <svg viewBox="0 -20 480 240" className="h-auto w-full overflow-visible">
+                  {(() => {
+                    const roundCount = Math.max(visibleRoundCount, 1);
+                    const xForRound = (roundNumber: number) => (roundNumber / roundCount) * 400;
+                    const pointsData = players.map((player, index) => {
+                      let runningTotal = 0;
+                      const points = [0];
+                      for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
+                        const roundScore = getRoundScore(player.id, roundIndex);
+                        runningTotal += roundScore ?? 0;
+                        points.push(runningTotal);
+                      }
+
+                      return {
+                        name: displayPlayerName(player),
+                        color: graphLineStyles[index]?.stroke || '#111111',
+                        strokeWidth: graphLineStyles[index]?.strokeWidth || 3,
+                        strokeDasharray: graphLineStyles[index]?.strokeDasharray || '',
+                        finalScore: runningTotal,
+                        points,
+                      };
+                    });
+
+                    const allScores = pointsData.flatMap((d) => d.points);
+                    const max = Math.max(...allScores, 10);
+                    const min = Math.min(...allScores, 0);
+                    const range = max - min || 1;
+
+                    const labelData = pointsData
+                      .map((d) => ({
+                        ...d,
+                        targetY: 200 - ((d.finalScore - min) / range) * 200,
+                      }))
+                      .sort((a, b) => a.targetY - b.targetY);
+
+                    for (let i = 1; i < labelData.length; i += 1) {
+                      if (labelData[i].targetY - labelData[i - 1].targetY < 18) {
+                        labelData[i].targetY = labelData[i - 1].targetY + 18;
+                      }
                     }
 
-                    return { color: '#3b82f6', emoji: player.emoji, finalScore: runningTotal, points };
-                  });
+                    return (
+                      <>
+                        {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                          <line
+                            key={`x-grid-${roundNumber}`}
+                            x1={xForRound(roundNumber)}
+                            y1="0"
+                            x2={xForRound(roundNumber)}
+                            y2="200"
+                            stroke="#d1d1cb"
+                            strokeWidth="1"
+                          />
+                        ))}
 
-                  const allScores = pointsData.flatMap((d) => d.points);
-                  const max = Math.max(...allScores, 10);
-                  const min = Math.min(...allScores, 0);
-                  const range = max - min || 1;
+                        {min < 0 && (
+                          <line
+                            x1="0"
+                            y1={200 - ((0 - min) / range) * 200}
+                            x2="400"
+                            y2={200 - ((0 - min) / range) * 200}
+                            stroke="#7a7a7a"
+                            strokeDasharray="4"
+                          />
+                        )}
 
-                  const labelData = pointsData
-                    .map((d, i) => ({ ...d, color: ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'][i % 8], targetY: 200 - ((d.finalScore - min) / range) * 200 }))
-                    .sort((a, b) => a.targetY - b.targetY);
+                        <line x1="0" y1="200" x2="400" y2="200" stroke="#6f6f69" strokeWidth="1.2" />
 
-                  for (let i = 1; i < labelData.length; i += 1) {
-                    if (labelData[i].targetY - labelData[i - 1].targetY < 18) {
-                      labelData[i].targetY = labelData[i - 1].targetY + 18;
-                    }
-                  }
+                        {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                          <text
+                            key={`x-label-${roundNumber}`}
+                            x={xForRound(roundNumber)}
+                            y="216"
+                            textAnchor="middle"
+                            fill="#4a4a44"
+                            fontSize="11"
+                            fontWeight="700"
+                          >
+                            R{roundNumber}
+                          </text>
+                        ))}
 
-                  return (
-                    <>
-                      {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" />}
-                      {labelData.map((d, i) => (
-                        <polyline
-                          key={`line-${i}`}
-                          points={d.points.map((s, idx) => `${(idx / Math.max(d.points.length - 1, 1)) * 400},${200 - ((s - min) / range) * 200}`).join(' ')}
-                          fill="none"
-                          stroke={d.color}
-                          strokeWidth="3.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="drop-shadow-sm"
-                        />
-                      ))}
-                      {labelData.map((d, i) => (
-                        <text key={`label-${i}`} x="408" y={d.targetY + 5} fill={d.color} fontSize="14" fontWeight="bold" className="drop-shadow-sm">
-                          {d.finalScore} {d.emoji}
-                        </text>
-                      ))}
-                    </>
-                  );
-                })()}
-              </svg>
+                        {pointsData.map((d, i) => (
+                          <polyline
+                            key={`line-${i}`}
+                            points={d.points
+                              .map((score, idx) => `${(idx / roundCount) * 400},${200 - ((score - min) / range) * 200}`)
+                              .join(' ')}
+                            fill="none"
+                            stroke={d.color}
+                            strokeWidth={d.strokeWidth}
+                            strokeDasharray={d.strokeDasharray || undefined}
+                            strokeLinecap="butt"
+                            strokeLinejoin="miter"
+                          />
+                        ))}
+
+                        {labelData.map((d, i) => (
+                          <text key={`label-${i}`} x="408" y={d.targetY + 5} fill={d.color} fontSize="14" fontWeight="bold">
+                            {d.name} {d.finalScore}
+                          </text>
+                        ))}
+                      </>
+                    );
+                  })()}
+                </svg>
+              </div>
             </div>
           )}
 
           <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
-            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+            <div className="rounded-none border border-black/20 bg-[#f6f6f2]/95 p-3 backdrop-blur-md">
               <div className="flex gap-2">
                 {!isGameComplete && currentPlayer && (
                   <button
                     onClick={() => openScoreEntry(currentRoundIndex, currentPlayer.id)}
-                    className="flex-1 rounded-xl bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/50 p-4 text-sm font-black text-blue-600 dark:text-blue-300 shadow-sm active:scale-[0.98] transition"
+                    className="flex-1 rounded-none bg-white border border-black/20 p-4 text-sm font-black text-black active:scale-[0.98] transition"
                   >
-                    🎯 Enter {displayPlayerName(currentPlayer)} Score
+                    Enter {displayPlayerName(currentPlayer)} Score
                   </button>
                 )}
                 {isGameComplete && (
                   <button
                     onClick={handleShare}
-                    className="rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 p-4 text-sm font-black shadow-sm active:scale-[0.98] transition"
+                    className="rounded-none bg-white border border-black/20 text-black p-4 text-sm font-black active:scale-[0.98] transition"
                   >
-                    📤 Share
+                    Share
                   </button>
                 )}
                 <button
                   onClick={() => void handleSaveAndClose()}
-                  className={`flex-1 rounded-xl p-4 text-sm font-black shadow-sm active:scale-[0.98] transition ${isGameComplete ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                  className="flex-1 rounded-none border border-black/30 bg-black p-4 text-sm font-black text-white active:scale-[0.98] transition"
                 >
-                  {isGameComplete ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
+                  Finish & Close
                 </button>
               </div>
             </div>
@@ -1115,19 +1197,19 @@ export default function FarklePage() {
             ) : undefined
           }
         >
-          <div className="mb-3 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+          <div className="mb-3 flex border border-black/20 bg-[#ecece7] p-1">
             <button
               onClick={() => setEntryMode('quick')}
-              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
-                entryMode === 'quick' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'
+              className={`flex-1 py-2 text-sm font-black uppercase tracking-[0.08em] transition-colors ${
+                entryMode === 'quick' ? 'border border-black/30 bg-black text-white' : 'text-black/55'
               }`}
             >
               Quick Entry
             </button>
             <button
               onClick={() => setEntryMode('full')}
-              className={`flex-1 rounded-lg py-2 text-sm font-bold transition-all ${
-                entryMode === 'full' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'
+              className={`flex-1 py-2 text-sm font-black uppercase tracking-[0.08em] transition-colors ${
+                entryMode === 'full' ? 'border border-black/30 bg-black text-white' : 'text-black/55'
               }`}
             >
               Full 0-9
@@ -1140,7 +1222,7 @@ export default function FarklePage() {
                 <button
                   key={combo.id}
                   onClick={() => incrementInput(combo.points)}
-                  className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-black text-amber-700 transition active:scale-95 dark:bg-amber-900/20 dark:text-amber-300"
+                  className="border border-black/20 bg-white px-3 py-2.5 text-sm font-black text-black transition-colors active:bg-black active:text-white"
                 >
                   <span className="block text-xl leading-none">+{combo.points}</span>
                   <span className="block text-[11px] uppercase tracking-wide opacity-70 mt-1">{combo.label}</span>
@@ -1153,7 +1235,7 @@ export default function FarklePage() {
                 <button
                   key={digit}
                   onClick={() => setInputValue((prev) => (prev === '0' ? String(digit) : `${prev}${digit}`))}
-                  className="rounded-xl bg-slate-100 py-3 text-xl font-semibold transition active:scale-95 dark:bg-slate-800"
+                  className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
                 >
                   {digit}
                 </button>
@@ -1164,19 +1246,19 @@ export default function FarklePage() {
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => { setInputValue('0'); setAcceptedStolenScore(null); }}
-              className="rounded-xl bg-red-50 py-3 text-lg font-bold text-red-500 transition active:scale-95 dark:bg-red-900/20 dark:text-red-400"
+              className="border border-black/20 bg-[#e2e2dc] py-3 text-lg font-black text-black transition-colors active:bg-black active:text-white"
             >
               {acceptedStolenScore !== null ? 'Clear Steal' : 'Clear'}
             </button>
             <button
               onClick={() => setInputValue((prev) => (prev === '0' ? '0' : `${prev}0`))}
-              className="rounded-xl bg-slate-100 py-3 text-xl font-semibold transition active:scale-95 dark:bg-slate-800"
+              className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
             >
               0
             </button>
             <button
               onClick={() => setInputValue((prev) => (prev.length <= 1 ? '0' : prev.slice(0, -1)))}
-              className="rounded-xl bg-slate-200 py-3 text-xl font-bold text-slate-700 transition active:scale-95 dark:bg-slate-700 dark:text-slate-200"
+              className="border border-black/20 bg-[#ecece7] py-3 text-xl font-black text-black transition-colors active:bg-black active:text-white"
             >
               ⌫
             </button>
@@ -1215,41 +1297,41 @@ export default function FarklePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 font-sans text-slate-800 dark:text-slate-200 animate-in fade-in slide-in-from-bottom-2">
-      <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-        <h1 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">🎲 Farkle Setup</h1>
+      <div className="min-h-screen bg-[#f6f6f2] pb-24 font-sans text-black animate-in fade-in slide-in-from-bottom-2">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <h1 className="text-2xl font-black text-[#111] flex items-center gap-2 [font-family:Georgia,'Times_New_Roman',serif]">Farkle Setup</h1>
         <button
           onClick={() => startGame()}
           disabled={players.length === 0}
-          className={`h-10 rounded-full px-5 text-sm font-bold shadow-sm transition-all active:scale-95 ${players.length === 0 ? 'bg-slate-200 text-slate-400 dark:bg-slate-800' : Object.keys(scores).length > 0 ? 'bg-blue-600 text-white' : 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'}`}
+          className={`disabled:bg-black/10 disabled:text-black/40 px-5 h-10 rounded-none font-bold active:scale-95 transition-all flex items-center justify-center text-sm border ${Object.keys(scores).length > 0 ? 'bg-black text-white border-black' : 'bg-white text-black border-black/25'}`}
         >
-          {Object.keys(scores).length > 0 ? '▶️ Resume Game' : '🚀 Start Game'}
+          {Object.keys(scores).length > 0 ? '▸ Resume Game' : '✦ Start Game'}
         </button>
       </div>
 
       <div className="mx-auto max-w-screen-md p-6 pt-[88px]">
-        <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Game Rules</h2>
-        <div className="mb-6 rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <label className="mb-3 block text-xs font-bold uppercase tracking-widest text-slate-400">Farkle Mode</label>
-          <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-            <button onClick={() => setMode('regular')} className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${mode === 'regular' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>Regular</button>
-            <button onClick={() => setMode('stealing')} className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${mode === 'stealing' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>Stealing</button>
+        <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-black/55">Game Rules</h2>
+        <div className="mb-6 rounded-none border border-black/20 bg-[#fbfbf8] p-5">
+          <label className="mb-3 block text-xs font-bold uppercase tracking-widest text-black/55">Farkle Mode</label>
+          <div className="flex border border-black/20 bg-white p-1 rounded-none">
+            <button onClick={() => setMode('regular')} className={`flex-1 rounded-none py-2.5 text-sm font-bold transition-all ${mode === 'regular' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Regular</button>
+            <button onClick={() => setMode('stealing')} className={`flex-1 rounded-none py-2.5 text-sm font-bold transition-all ${mode === 'stealing' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Stealing</button>
           </div>
         </div>
 
-        <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Win Conditions</h2>
-        <div className="mb-8 rounded-2xl border-2 border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <label className="mb-3 block text-xs font-bold uppercase tracking-widest text-slate-400">Win Method</label>
-          <div className="mb-4 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+        <h2 className="mb-2 ml-1 text-sm font-bold uppercase tracking-widest text-black/55">Win Conditions</h2>
+        <div className="mb-8 rounded-none border border-black/20 bg-[#fbfbf8] p-5">
+          <label className="mb-3 block text-xs font-bold uppercase tracking-widest text-black/55">Win Method</label>
+          <div className="mb-4 flex border border-black/20 bg-white p-1 rounded-none">
             <button
               onClick={() => setWinCondition('target')}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'target' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
+              className={`flex-1 rounded-none py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'target' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}
             >
               Target Score
             </button>
             <button
               onClick={() => setWinCondition('rounds')}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'rounds' ? 'bg-white text-slate-800 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}
+              className={`flex-1 rounded-none py-2.5 text-sm font-bold transition-all ${activeWinCondition === 'rounds' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}
             >
               Round Count
             </button>
@@ -1257,12 +1339,12 @@ export default function FarklePage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'target' ? 'text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>Target Score</label>
+            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'target' ? 'text-black/55' : 'text-black/30'}`}>Target Score</label>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSettings((prev) => ({ ...prev, targetScore: Math.max(1, prev.targetScore - 500), roundCount: null }))}
                 disabled={activeWinCondition !== 'target'}
-                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+                className="h-11 w-11 rounded-none border border-black/20 bg-white text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 -
               </button>
@@ -1272,24 +1354,24 @@ export default function FarklePage() {
                 value={settings.targetScore}
                 onChange={(event) => handleTargetChange(event.target.value)}
                 disabled={activeWinCondition !== 'target'}
-                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950"
+                className="h-11 flex-1 rounded-none border border-black/20 bg-white px-4 text-lg font-black outline-none focus:border-black disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <button
                 onClick={() => setSettings((prev) => ({ ...prev, targetScore: prev.targetScore + 500, roundCount: null }))}
                 disabled={activeWinCondition !== 'target'}
-                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+                className="h-11 w-11 rounded-none border border-black/20 bg-white text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 +
               </button>
             </div>
           </div>
           <div>
-            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'rounds' ? 'text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>Round Count</label>
+            <label className={`mb-2 block text-xs font-bold uppercase tracking-widest ${activeWinCondition === 'rounds' ? 'text-black/55' : 'text-black/30'}`}>Round Count</label>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setSettings((prev) => ({ ...prev, targetScore: 0, roundCount: Math.max(1, (prev.roundCount || DEFAULT_ROUND_COUNT) - 1) }))}
                 disabled={activeWinCondition !== 'rounds'}
-                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+                className="h-11 w-11 rounded-none border border-black/20 bg-white text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 -
               </button>
@@ -1299,17 +1381,17 @@ export default function FarklePage() {
                 value={settings.roundCount ?? DEFAULT_ROUND_COUNT}
                 onChange={(event) => handleRoundCountChange(event.target.value)}
                 disabled={activeWinCondition !== 'rounds'}
-                className="h-11 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-lg font-black outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-950"
+                className="h-11 flex-1 rounded-none border border-black/20 bg-white px-4 text-lg font-black outline-none focus:border-black disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <button
                 onClick={() => setSettings((prev) => ({ ...prev, targetScore: 0, roundCount: (prev.roundCount || DEFAULT_ROUND_COUNT) + 1 }))}
                 disabled={activeWinCondition !== 'rounds'}
-                className="h-11 w-11 rounded-xl bg-slate-100 text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed dark:bg-slate-800"
+                className="h-11 w-11 rounded-none border border-black/20 bg-white text-xl font-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 +
               </button>
             </div>
-            <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">Pick one method only. Switching methods automatically disables and clears the other win condition.</p>
+            <p className="mt-2 text-xs font-medium text-black/55">Pick one method only. Switching methods automatically disables and clears the other win condition.</p>
           </div>
           </div>
         </div>
@@ -1327,17 +1409,17 @@ export default function FarklePage() {
           onClearSetup={() => setShowClearSetupConfirm(true)}
           createPlayerSlot={
             isCreatingPlayer ? (
-              <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 animate-in fade-in slide-in-from-top-2">
+              <div className="mb-6 rounded-none border border-black/20 bg-[#fbfbf8] p-4 animate-in fade-in slide-in-from-top-2">
                 <div className="flex gap-2">
                   <input
                     value={newPlayerName}
                     onChange={(event) => setNewPlayerName(event.target.value)}
                     placeholder="Player name"
-                    className="h-12 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 font-bold outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950"
+                    className="h-12 flex-1 rounded-none border border-black/20 bg-white px-4 font-bold outline-none focus:border-black"
                     autoFocus
                   />
-                  <button onClick={() => void addPlayer()} className="rounded-xl bg-blue-600 px-5 font-bold text-white shadow-sm active:scale-95 transition">Add</button>
-                  <button onClick={() => setIsCreatingPlayer(false)} className="rounded-xl bg-slate-200 px-4 font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">✕</button>
+                  <button onClick={() => void addPlayer()} className="rounded-none border border-black/30 bg-black px-5 font-bold text-white active:scale-95 transition">Add</button>
+                  <button onClick={() => setIsCreatingPlayer(false)} className="rounded-none border border-black/20 bg-white px-4 font-bold text-black">✕</button>
                 </div>
               </div>
             ) : undefined

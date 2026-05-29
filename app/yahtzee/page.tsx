@@ -1,7 +1,7 @@
 // app/yahtzee/page.tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import type { ActiveSession } from '../../hooks/useActiveSession';
@@ -40,6 +40,15 @@ const LOWER_CATEGORIES = [
   { id: 'chance', name: 'Chance' }, { id: 'bonus', name: 'Yahtzee Bonus' }
 ];
 
+const UPPER_DICE_DINGBATS: Record<string, string> = {
+  ones: '⚀',
+  twos: '⚁',
+  threes: '⚂',
+  fours: '⚃',
+  fives: '⚄',
+  sixes: '⚅',
+};
+
 export default function YahtzeePage() {
   const router = useRouter();
 
@@ -70,18 +79,22 @@ export default function YahtzeePage() {
   const [showDiceRoller, setShowDiceRoller] = useState(false);
   const columnsPerPlayer = isTripleYahtzee ? 3 : 1;
   const totalGridColumns = 1 + players.length * columnsPerPlayer;
+  const graphLineStyles = useMemo(() => {
+    const shades = ['#111111', '#2e2e2e', '#4a4a4a', '#666666', '#7a7a7a', '#909090', '#3a3a3a', '#555555'];
+    const widths = [4, 3.5, 3.5, 3, 3, 2.5, 2.5, 2];
+    const dashes = ['', '10 6', '4 4', '14 6 2 6', '2 4', '12 4', '8 3 2 3', '1 4'];
+
+    return players.map((_, index) => ({
+      stroke: shades[index % shades.length],
+      strokeWidth: widths[index % widths.length],
+      strokeDasharray: dashes[index % dashes.length]
+    }));
+  }, [players]);
 
   const { activeSession, saveSession, clearSession } = useActiveSession();
 
   const currentSessionId = activeSession?.gameType === 'yahtzee' ? activeSession.sessionId : undefined;
   const hasInProgressGame = players.length > 0 || Object.keys(scores).length > 0;
-
-  useEffect(() => {
-    if (players.length > 0 && Object.keys(scores).length > 0) {
-      const transition = setTimeout(() => setPhase('PLAYING'), 0);
-      return () => clearTimeout(transition);
-    }
-  }, [players.length, scores]);
 
   // Fetch the Global Roster on Mount
   useEffect(() => {
@@ -437,28 +450,28 @@ export default function YahtzeePage() {
   // ==========================================
   if (phase === 'PLAYING') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-[300px] font-sans text-slate-800 dark:text-slate-200">
-        <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-          <h1 className="text-2xl font-black text-slate-800 dark:text-white truncate pr-4">{isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee'}</h1>
+      <div className="min-h-screen bg-[#f6f6f2] pb-[300px] font-sans text-black">
+        <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-50 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+          <h1 className="text-2xl font-black text-[#111] truncate pr-4 [font-family:Georgia,'Times_New_Roman',serif]">{isTripleYahtzee ? 'Triple Yahtzee' : 'Yahtzee'}</h1>
           <div className="flex items-center gap-2">
-            <button onClick={() => setShowDiceRoller(true)} className="h-9 px-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center text-sm font-bold active:scale-95 transition gap-1">🎲 <span className="hidden sm:inline">Roll</span></button>
-            <button onClick={() => setPhase('SETUP')} className="w-10 h-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-full flex items-center justify-center text-xl active:scale-95 transition">⚙️</button>
+            <button onClick={() => setShowDiceRoller(true)} className="h-10 px-3 bg-white border border-black/20 text-black rounded-none flex items-center justify-center text-sm font-bold active:scale-95 transition gap-1.5"><span className="text-xl leading-none">⚂</span> <span>Roll Dice</span></button>
+            <button onClick={() => setPhase('SETUP')} className="h-10 px-3 bg-white border border-black/20 text-black rounded-none flex items-center justify-center text-sm font-bold active:scale-95 transition">Game Setup</button>
           </div>
         </div>
 
         <main className="max-w-screen-md mx-auto px-4 pt-16">
-          <div className="sticky top-16 z-40 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-2 pb-3 mb-3">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>🧮 Score Grid</button>
-              <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>📈 Live Graph</button>
+          <div className="sticky top-16 z-40 bg-[#f6f6f2]/95 backdrop-blur-md pt-2 pb-3 mb-3">
+            <div className="flex bg-white border border-black/20 p-1 rounded-none">
+              <button onClick={() => setPlayingView('GRID')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${playingView === 'GRID' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Score Grid</button>
+              <button onClick={() => setPlayingView('GRAPH')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${playingView === 'GRAPH' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Live Graph</button>
             </div>
           </div>
 
           {playingView === 'GRID' ? (
             <>
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
+              <div className="bg-white border border-black/20 rounded-none overflow-hidden mb-8">
                 <div className="overflow-x-auto overflow-y-visible scrollbar-hide">
-                  <table className="w-full table-fixed min-w-max">
+                  <table className="w-full table-fixed min-w-max border-collapse [&_thead_th]:border [&_thead_th]:border-black/10 [&_tbody_td]:border [&_tbody_td]:border-black/10">
                     <colgroup>
                       <col className="w-24" />
                       {players.map((p) => (
@@ -469,16 +482,16 @@ export default function YahtzeePage() {
                     </colgroup>
                     <thead>
                       <tr>
-                        <th className="w-24 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="w-24 sticky left-0 top-0 z-30 bg-[#f6f6f2]/95 backdrop-blur-md py-3 text-xs font-bold text-black/55 uppercase tracking-wider">
                           Cat
                         </th>
                         {players.map((p) => (
-                          <th key={p.id} colSpan={columnsPerPlayer} className="sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
+                          <th key={p.id} colSpan={columnsPerPlayer} className="sticky top-0 z-20 bg-white/95 backdrop-blur-md p-3">
                             <div className="flex flex-col items-center gap-1">
-                              <div className="w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-xl shadow-sm overflow-hidden">
-                                {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : <span>{p.emoji}</span>}
+                              <div className="w-10 h-10 bg-[#f6f6f2] border border-black/20 rounded-none flex items-center justify-center text-xl overflow-hidden">
+                                {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized referrerPolicy="no-referrer" className="w-full h-full object-cover rounded-none" /> : <span>{p.emoji}</span>}
                               </div>
-                              <div className="text-[11px] font-black uppercase tracking-wide truncate w-full px-1 text-center">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
+                              <div className="text-[11px] font-black uppercase tracking-wide truncate w-full px-1 text-center text-black">{p.isCloudUser ? formatFirstName(p.name) : p.name}</div>
                               {isTripleYahtzee && (
                                 <div className="flex w-full text-[9px] font-black text-slate-400">
                                   <span className="flex-1 border-r border-slate-200 dark:border-slate-700">X1</span>
@@ -493,25 +506,25 @@ export default function YahtzeePage() {
                     </thead>
                     <tbody>
                       <tr>
-                        <td colSpan={totalGridColumns} className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                        <td colSpan={totalGridColumns} className="bg-[#f6f6f2] px-4 py-2 text-xs font-black uppercase tracking-widest text-black/55 border-b border-black/10">
                           Upper Section
                         </td>
                       </tr>
                       {UPPER_CATEGORIES.map((cat) => (
-                        <tr key={cat.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="w-24 sticky left-0 z-10 bg-white dark:bg-slate-900 p-3 font-bold text-sm text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800">
-                            {cat.name}
+                        <tr key={cat.id} className="hover:bg-black/5 transition-colors">
+                          <td className="w-24 sticky left-0 z-10 bg-white p-3 font-bold text-sm text-black border-r border-black/10">
+                            {UPPER_DICE_DINGBATS[cat.id]} {cat.name}
                           </td>
                           {players.map((p) => (
                             Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
                               const val = scores[p.id]?.[cat.id]?.[colIdx];
                               return (
-                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
+                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-black/10 last:border-r-0">
                                   <button
                                     onClick={() => handleCellClick(p.id, cat.id, colIdx)}
-                                    className="w-full py-3 font-black text-base text-center text-slate-700 dark:text-slate-200"
+                                    className="w-full py-3 font-black text-base text-center text-black"
                                   >
-                                    {val !== null && val !== undefined ? val : <span className="text-slate-300 dark:text-slate-700">-</span>}
+                                    {val !== null && val !== undefined ? val : <span className="text-black/25">-</span>}
                                   </button>
                                 </td>
                               );
@@ -519,27 +532,27 @@ export default function YahtzeePage() {
                           ))}
                         </tr>
                       ))}
-                      <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-                        <td className="w-24 sticky left-0 z-10 bg-slate-50 dark:bg-slate-900 p-3 font-black text-xs uppercase tracking-wider text-slate-500 border-r border-slate-200 dark:border-slate-800">
+                      <tr className="bg-[#f6f6f2] border-b border-black/10">
+                        <td className="w-24 sticky left-0 z-10 bg-[#f6f6f2] p-3 font-black text-xs uppercase tracking-wider text-black/55 border-r border-black/10">
                           Subtotal
                         </td>
                         {players.map((p) => (
                           Array.from({ length: columnsPerPlayer }).map((_, colIdx) => (
-                            <td key={`${p.id}-sub-${colIdx}`} className="w-24 py-2 text-center font-bold text-sm text-slate-500 border-r border-slate-200 dark:border-slate-800">
+                            <td key={`${p.id}-sub-${colIdx}`} className="w-24 py-2 text-center font-bold text-sm text-black/65 border-r border-black/10">
                               {calcUpperTotal(p.id, colIdx)}
                             </td>
                           ))
                         ))}
                       </tr>
-                      <tr className="bg-emerald-50 dark:bg-emerald-900/10 border-b border-emerald-100 dark:border-emerald-800">
-                        <td className="w-24 sticky left-0 z-10 bg-emerald-50 dark:bg-emerald-900/10 p-3 font-black text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-500 border-r border-emerald-100 dark:border-emerald-800">
+                      <tr className="bg-[#f6f6f2] border-b border-black/10">
+                        <td className="w-24 sticky left-0 z-10 bg-[#f6f6f2] p-3 font-black text-[10px] uppercase tracking-wider text-black/60 border-r border-black/10">
                           Bonus (63+)
                         </td>
                         {players.map((p) => (
                           Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
                             const bonus = calcUpperBonus(calcUpperTotal(p.id, colIdx));
                             return (
-                              <td key={`${p.id}-bonus-${colIdx}`} className={`w-24 py-2 text-center font-black text-sm border-r border-emerald-100 dark:border-emerald-800 ${bonus > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300 dark:text-slate-600'}`}>
+                              <td key={`${p.id}-bonus-${colIdx}`} className={`w-24 py-2 text-center font-black text-sm border-r border-black/10 ${bonus > 0 ? 'text-black' : 'text-black/25'}`}>
                                 {bonus > 0 ? '+35' : '-'}
                               </td>
                             );
@@ -548,25 +561,25 @@ export default function YahtzeePage() {
                       </tr>
 
                       <tr>
-                        <td colSpan={totalGridColumns} className="bg-slate-100 dark:bg-slate-800/50 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                        <td colSpan={totalGridColumns} className="bg-[#f6f6f2] px-4 py-2 text-xs font-black uppercase tracking-widest text-black/55 border-b border-black/10">
                           Lower Section
                         </td>
                       </tr>
                       {LOWER_CATEGORIES.map((cat) => (
-                        <tr key={cat.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="w-24 sticky left-0 z-10 bg-white dark:bg-slate-900 p-3 font-bold text-xs text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-slate-800 leading-tight">
+                        <tr key={cat.id} className="hover:bg-black/5 transition-colors">
+                          <td className="w-24 sticky left-0 z-10 bg-white p-3 font-bold text-xs text-black border-r border-black/10 leading-tight">
                             {cat.name}
                           </td>
                           {players.map((p) => (
                             Array.from({ length: columnsPerPlayer }).map((_, colIdx) => {
                               const val = scores[p.id]?.[cat.id]?.[colIdx];
                               return (
-                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-slate-100 dark:border-slate-800/50 last:border-r-0">
+                                <td key={`${p.id}-${cat.id}-${colIdx}`} className="w-24 border-r border-black/10 last:border-r-0">
                                   <button
                                     onClick={() => handleCellClick(p.id, cat.id, colIdx)}
-                                    className="w-full py-3 font-black text-base text-center text-slate-700 dark:text-slate-200"
+                                    className="w-full py-3 font-black text-base text-center text-black"
                                   >
-                                    {val !== null && val !== undefined ? val : <span className="text-slate-300 dark:text-slate-700">-</span>}
+                                    {val !== null && val !== undefined ? val : <span className="text-black/25">-</span>}
                                   </button>
                                 </td>
                               );
@@ -575,9 +588,9 @@ export default function YahtzeePage() {
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-slate-800 dark:bg-slate-200 text-white border-t border-slate-700 dark:border-slate-300">
+                    <tfoot className="bg-black text-white border-t border-black">
                       <tr>
-                        <td className="w-24 sticky left-0 z-10 bg-slate-800 dark:bg-slate-200 p-4 font-black text-xs uppercase tracking-widest border-r border-slate-700 dark:border-slate-300">
+                        <td className="w-24 sticky left-0 z-10 bg-black p-4 font-black text-xs uppercase tracking-widest border-r border-white/10">
                           Grand
                         </td>
                         {players.map((p) => (
@@ -588,9 +601,9 @@ export default function YahtzeePage() {
                             const grand = upTotal + bonus + lowTotal;
                             const multiplier = isTripleYahtzee ? (colIdx + 1) : 1;
                             return (
-                              <td key={`${p.id}-grand-${colIdx}`} className="w-24 p-3 text-center border-r border-slate-700 dark:border-slate-300">
-                                <span className="font-black text-xl text-white dark:text-black">{grand * multiplier}</span>
-                                {isTripleYahtzee && <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500">({grand}x{multiplier})</div>}
+                              <td key={`${p.id}-grand-${colIdx}`} className="w-24 p-3 text-center border-r border-white/10">
+                                <span className="font-black text-xl text-white">{grand * multiplier}</span>
+                                {isTripleYahtzee && <div className="text-[9px] font-bold text-white/55">({grand}x{multiplier})</div>}
                               </td>
                             );
                           })
@@ -602,90 +615,150 @@ export default function YahtzeePage() {
               </div>
 
             <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
-              <div className="rounded-2xl border border-slate-200/80 bg-slate-50/95 p-3 shadow-lg backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/95">
+              <div className="rounded-none border border-black/20 bg-[#f6f6f2]/95 p-3 backdrop-blur-md">
                 <div className="flex gap-2">
                   {isGameComplete && (
                     <button
                       onClick={handleShare}
-                      className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold px-4 py-3.5 rounded-xl text-base shadow-sm active:scale-95 transition-all"
+                      className="bg-white text-black font-bold px-4 py-3.5 rounded-none border border-black/20 text-base active:scale-95 transition-all"
                     >
-                      📤 Share
+                      Share
                     </button>
                   )}
                   <button
                     onClick={handleSaveAndClose}
-                    className={`flex-1 py-3.5 rounded-xl text-base font-bold shadow-sm active:scale-95 transition-all ${isGameComplete ? 'bg-red-600 text-white' : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900'}`}
+                    className="flex-1 py-3.5 rounded-none text-base font-bold border border-black/30 bg-black text-white active:scale-95 transition-all"
                   >
-                    {isGameComplete ? '🏁 Finish & Close' : '⏹️ Finish & Close'}
+                    Finish & Close
                   </button>
                 </div>
               </div>
             </div>
             </>
             ) : (
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-4 animate-in fade-in">
-                <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
-                  {(() => {
-                    const pointsData = buildYahtzeeGraphSeries({
-                      players,
-                      scores,
-                      isTripleYahtzee,
-                      scoreEntries,
-                    });
-
-                    const allScores = pointsData.flatMap(d => d.points);
-                    const max = Math.max(...allScores, 10);
-                    const min = Math.min(...allScores, 0);
-                    const range = max - min || 1;
-                    const longestPath = Math.max(...pointsData.map(d => d.points.length), 1);
-                    const xStep = 400 / Math.max(longestPath - 1, 1);
-
-                    const labelData = pointsData
-                      .map((d) => {
-                        const finalY = 200 - ((d.finalScore - min) / range) * 200;
-                        return { ...d, targetY: finalY };
-                      })
-                      .sort((a, b) => a.targetY - b.targetY);
-
-                    for (let i = 1; i < labelData.length; i += 1) {
-                      if (labelData[i].targetY - labelData[i - 1].targetY < 20) {
-                        labelData[i].targetY = labelData[i - 1].targetY + 20;
-                      }
-                    }
-
-                    const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'];
-
-                    return (
-                      <>
-                        {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" className="dark:stroke-slate-700" />}
-                        {pointsData.map((d, i) => (
-                          <polyline
-                            key={`line-${d.id}`}
-                            points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')}
-                            fill="none"
-                            stroke={colors[i % colors.length]}
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        ))}
-                        {labelData.map((d, i) => (
-                          <text key={`label-${d.id}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
-                            {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0, 8)}
-                          </text>
-                        ))}
-                      </>
-                    );
-                  })()}
-                </svg>
-
-                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-2">
-                  {players.map((player) => (
-                    <div key={player.id} className="bg-slate-50 dark:bg-slate-950 rounded-xl px-3 py-2 flex items-center justify-between">
-                      <span className="font-bold text-sm truncate">{player.isCloudUser ? formatFirstName(player.name) : player.name}</span>
-                      <span className="font-black text-base">{calcGrandTotal(player.id)}</span>
+              <div className="animate-in fade-in">
+                <div className="mb-4 flex flex-wrap justify-center gap-3 border border-black/20 bg-[#fbfbf8] p-3 rounded-none">
+                  {players.map((player, index) => (
+                    <div key={player.id} className="flex items-center gap-2 border border-black/20 bg-white px-2 py-1 text-sm font-bold rounded-none">
+                      <svg width="28" height="12" viewBox="0 0 28 12" aria-hidden="true">
+                        <line
+                          x1="1"
+                          y1="6"
+                          x2="27"
+                          y2="6"
+                          stroke={graphLineStyles[index]?.stroke}
+                          strokeWidth={graphLineStyles[index]?.strokeWidth}
+                          strokeDasharray={graphLineStyles[index]?.strokeDasharray || undefined}
+                          strokeLinecap="butt"
+                        />
+                      </svg>
+                      <span>{player.isCloudUser ? formatFirstName(player.name) : player.name.split(' ')[0] || player.name}</span>
                     </div>
                   ))}
+                </div>
+
+                <div className="overflow-hidden border border-black/20 bg-white p-4 rounded-none">
+                  <svg viewBox="0 -20 480 240" className="h-auto w-full overflow-visible">
+                    {(() => {
+                      const pointsData = buildYahtzeeGraphSeries({
+                        players,
+                        scores,
+                        isTripleYahtzee,
+                        scoreEntries,
+                      }).map((d, index) => ({
+                        ...d,
+                        name: d.isCloudUser ? formatFirstName(d.name) : d.name.split(' ')[0] || d.name,
+                        color: graphLineStyles[index]?.stroke || '#111111',
+                        strokeWidth: graphLineStyles[index]?.strokeWidth || 3,
+                        strokeDasharray: graphLineStyles[index]?.strokeDasharray || '',
+                      }));
+
+                      const allScores = pointsData.flatMap((d) => d.points);
+                      const max = Math.max(...allScores, 10);
+                      const min = Math.min(...allScores, 0);
+                      const range = max - min || 1;
+                      const longestPath = Math.max(...pointsData.map((d) => d.points.length), 1);
+                      const roundCount = Math.max(longestPath - 1, 1);
+                      const xForRound = (roundNumber: number) => (roundNumber / roundCount) * 400;
+
+                      const labelData = pointsData
+                        .map((d) => ({
+                          ...d,
+                          targetY: 200 - ((d.finalScore - min) / range) * 200,
+                        }))
+                        .sort((a, b) => a.targetY - b.targetY);
+
+                      for (let i = 1; i < labelData.length; i += 1) {
+                        if (labelData[i].targetY - labelData[i - 1].targetY < 18) {
+                          labelData[i].targetY = labelData[i - 1].targetY + 18;
+                        }
+                      }
+
+                      return (
+                        <>
+                          {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                            <line
+                              key={`x-grid-${roundNumber}`}
+                              x1={xForRound(roundNumber)}
+                              y1="0"
+                              x2={xForRound(roundNumber)}
+                              y2="200"
+                              stroke="#d1d1cb"
+                              strokeWidth="1"
+                            />
+                          ))}
+
+                          {min < 0 && (
+                            <line
+                              x1="0"
+                              y1={200 - ((0 - min) / range) * 200}
+                              x2="400"
+                              y2={200 - ((0 - min) / range) * 200}
+                              stroke="#7a7a7a"
+                              strokeDasharray="4"
+                            />
+                          )}
+
+                          <line x1="0" y1="200" x2="400" y2="200" stroke="#6f6f69" strokeWidth="1.2" />
+
+                          {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                            <text
+                              key={`x-label-${roundNumber}`}
+                              x={xForRound(roundNumber)}
+                              y="216"
+                              textAnchor="middle"
+                              fill="#4a4a44"
+                              fontSize="11"
+                              fontWeight="700"
+                            >
+                              R{roundNumber}
+                            </text>
+                          ))}
+
+                          {pointsData.map((d, i) => (
+                            <polyline
+                              key={`line-${d.id}`}
+                              points={d.points
+                                .map((score, idx) => `${(idx / roundCount) * 400},${200 - ((score - min) / range) * 200}`)
+                                .join(' ')}
+                              fill="none"
+                              stroke={d.color}
+                              strokeWidth={d.strokeWidth}
+                              strokeDasharray={d.strokeDasharray || undefined}
+                              strokeLinecap="butt"
+                              strokeLinejoin="miter"
+                            />
+                          ))}
+
+                          {labelData.map((d) => (
+                            <text key={`label-${d.id}`} x="408" y={d.targetY + 5} fill={d.color} fontSize="14" fontWeight="bold">
+                              {d.name} {d.finalScore}
+                            </text>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </svg>
                 </div>
               </div>
             )}
@@ -715,7 +788,7 @@ export default function YahtzeePage() {
                     <button
                       key={num}
                       onClick={() => setInputValue(prev => prev.length < 3 ? prev + num : prev)}
-                      className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+                      className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
                     >
                       {num}
                     </button>
@@ -724,19 +797,19 @@ export default function YahtzeePage() {
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => setInputValue('')}
-                    className="rounded-xl bg-red-50 py-3 text-lg font-bold text-red-500 transition active:scale-95 dark:bg-red-900/20 dark:text-red-400"
+                    className="border border-black/20 bg-[#ecece7] py-3 text-lg font-black text-black transition-colors active:bg-black active:text-white"
                   >
                     Clear
                   </button>
                   <button
                     onClick={() => setInputValue(prev => prev + '0')}
-                    className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+                    className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
                   >
                     0
                   </button>
                   <button
                     onClick={() => setInputValue(prev => prev.slice(0, -1))}
-                    className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-xl text-xl font-bold active:bg-slate-300 dark:active:bg-slate-600 transition-all active:scale-95"
+                    className="border border-black/20 bg-[#e2e2dc] py-3 text-xl font-black text-black transition-colors active:bg-black active:text-white"
                   >
                     ⌫
                   </button>
@@ -751,10 +824,10 @@ export default function YahtzeePage() {
                   <button
                     key={scoreOpt}
                     onClick={() => setInputValue(scoreOpt.toString())}
-                    className={`py-3 rounded-xl text-xl font-bold transition-all active:scale-95 ${
+                    className={`border py-3 text-xl font-black transition-colors ${
                       inputValue === scoreOpt.toString()
-                        ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 active:bg-slate-200 dark:active:bg-slate-700'
+                        ? 'border-black/30 bg-black text-white'
+                        : 'border-black/20 bg-white text-black active:bg-black active:text-white'
                     }`}
                   >
                     {scoreOpt}
@@ -763,7 +836,7 @@ export default function YahtzeePage() {
               </div>
               <button
                 onClick={() => setInputValue('')}
-                className="w-full rounded-xl bg-red-50 py-3 text-lg font-bold text-red-500 transition active:scale-95 dark:bg-red-900/20 dark:text-red-400 mb-0"
+                className="mb-0 w-full border border-black/20 bg-[#e2e2dc] py-3 text-lg font-black text-black transition-colors active:bg-black active:text-white"
               >
                 Clear
               </button>
@@ -807,28 +880,28 @@ export default function YahtzeePage() {
   // RENDER: SETUP PHASE
   // ==========================================
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 font-sans text-slate-800 dark:text-slate-200 animate-in fade-in slide-in-from-bottom-2">
-      <div className="fixed top-0 left-0 right-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
-        <h1 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">🎲 Yahtzee Setup</h1>
+    <div className="min-h-screen bg-[#f6f6f2] pb-24 font-sans text-black animate-in fade-in slide-in-from-bottom-2">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-[#f8f8f5]/95 backdrop-blur-md border-b border-black/20 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+        <h1 className="text-2xl font-black text-[#111] flex items-center gap-2 [font-family:Georgia,'Times_New_Roman',serif]">Yahtzee Setup</h1>
         <button 
           onClick={() => startGame()} 
           disabled={players.length === 0}
-          className={`disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white px-5 h-10 rounded-full font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center text-sm ${Object.keys(scores).length > 0 ? 'bg-blue-600' : 'bg-slate-900 dark:bg-slate-100 dark:text-slate-900'}`}
+          className={`disabled:bg-black/10 disabled:text-black/40 px-5 h-10 rounded-none font-bold active:scale-95 transition-all flex items-center justify-center text-sm border ${Object.keys(scores).length > 0 ? 'bg-black text-white border-black' : 'bg-white text-black border-black/25'}`}
         >
-          {Object.keys(scores).length > 0 ? '▶️ Resume Game' : '🚀 Start Game'}
+          {Object.keys(scores).length > 0 ? '▸ Resume Game' : '✦ Start Game'}
         </button>
       </div>
       
       <div className="p-6 pt-[88px] max-w-screen-md mx-auto">
 
         {/* Game Rules */}
-        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2 ml-1">Game Rules</h2>
-        <div className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl p-5 mb-8 shadow-sm">
+        <h2 className="text-sm font-bold text-black/55 uppercase tracking-widest mb-2 ml-1">Game Rules</h2>
+        <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-5 mb-8">
           <div>
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-3">Game Variant</label>
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button onClick={() => setIsTripleYahtzee(false)} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${!isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Standard (1 Column)</button>
-              <button onClick={() => setIsTripleYahtzee(true)} className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${isTripleYahtzee ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Triple (3 Columns)</button>
+            <label className="text-xs font-bold text-black/55 uppercase tracking-widest block mb-3">Game Variant</label>
+            <div className="flex bg-white border border-black/20 p-1 rounded-none">
+              <button onClick={() => setIsTripleYahtzee(false)} className={`flex-1 py-2.5 rounded-none text-sm font-bold transition-all ${!isTripleYahtzee ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Standard (1 Column)</button>
+              <button onClick={() => setIsTripleYahtzee(true)} className={`flex-1 py-2.5 rounded-none text-sm font-bold transition-all ${isTripleYahtzee ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Triple (3 Columns)</button>
             </div>
           </div>
         </div>
@@ -847,9 +920,9 @@ export default function YahtzeePage() {
           createPlayerSlot={
             isCreatingPlayer ? (
               <div className="flex gap-2 mb-6 animate-in slide-in-from-top-2">
-                <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 rounded-xl flex-grow focus:outline-none focus:border-emerald-500 font-bold dark:text-white" autoFocus />
-                <button onClick={addPlayer} className="bg-emerald-600 text-white px-5 rounded-xl font-bold">Add</button>
-                <button onClick={() => setIsCreatingPlayer(false)} className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 rounded-xl font-bold">✕</button>
+                <input type="text" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="Player Name..." className="border border-black/20 bg-white p-3 rounded-none flex-grow focus:outline-none focus:border-black font-bold text-black" autoFocus />
+                <button onClick={addPlayer} className="bg-black text-white px-5 rounded-none border border-black/30 font-bold">Add</button>
+                <button onClick={() => setIsCreatingPlayer(false)} className="bg-white text-black border border-black/20 px-4 rounded-none font-bold">✕</button>
               </div>
             ) : undefined
           }

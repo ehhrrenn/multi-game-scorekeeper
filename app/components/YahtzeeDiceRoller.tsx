@@ -94,9 +94,9 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
   const canRoll = rollCount < 3 && !isAnimating;
   const rollLabel =
     rollCount === 0
-      ? '🎲 Roll Dice'
+      ? '⚂ Roll Dice'
       : rollCount < 3
-      ? `🎲 Re-roll (${3 - rollCount} left)`
+      ? `⚂ Re-roll (${3 - rollCount} left)`
       : null;
 
   return (
@@ -106,16 +106,16 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
         {[1, 2, 3].map((n) => (
           <div
             key={n}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black border-2 transition-all ${
+            className={`w-8 h-8 flex items-center justify-center text-sm font-black border transition-all ${
               rollCount >= n
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'
+                ? 'bg-black border-black text-white'
+                : 'bg-white border-black/20 text-black/45'
             }`}
           >
             {n}
           </div>
         ))}
-        <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 ml-1">
+        <span className="ml-1 text-sm font-semibold text-black/55">
           {rollCount === 0
             ? 'Roll up to 3 times'
             : rollCount === 3
@@ -140,7 +140,7 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
 
       {/* Hint */}
       {rollCount > 0 && rollCount < 3 && !isAnimating && (
-        <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+        <p className="text-center text-xs text-black/55">
           Tap a die to keep it between rolls • Gold dice are held
         </p>
       )}
@@ -149,7 +149,7 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
       {canRoll && (
         <button
           onClick={doRoll}
-          className="w-full rounded-xl bg-blue-600 py-3.5 text-lg font-bold text-white shadow-md shadow-blue-500/20 transition active:scale-95"
+          className="w-full border border-black/30 bg-black py-3.5 text-lg font-black text-white transition active:scale-95"
         >
           {rollLabel}
         </button>
@@ -159,7 +159,7 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
       {rollCount > 0 && (
         <button
           onClick={handleReset}
-          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300 transition active:scale-95"
+          className="w-full border border-black/20 bg-white py-2.5 text-sm font-bold text-black/70 transition active:scale-95"
         >
           Reset Turn
         </button>
@@ -167,14 +167,14 @@ export default function YahtzeeDiceRoller({ usedCategoryIds = [] }: Props) {
 
       {/* Category suggestions */}
       {categoryScores && rollCount > 0 && (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+        <div className="border border-black/20 overflow-hidden">
+          <div className="bg-[#f6f6f2] px-3 py-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-black/55">
               Category Scores
             </p>
           </div>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="divide-y divide-black/10">
             <SuggestionSection
               title="Upper"
               categories={YAHTZEE_UPPER_CATEGORIES}
@@ -207,8 +207,8 @@ function SuggestionSection({
 }) {
   return (
     <div>
-      <div className="px-3 py-1 bg-slate-50 dark:bg-slate-900/50">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+      <div className="px-3 py-1 bg-[#f6f6f2]">
+        <p className="text-[9px] font-black uppercase tracking-widest text-black/50">
           {title}
         </p>
       </div>
@@ -220,15 +220,15 @@ function SuggestionSection({
           return (
             <div
               key={cat.id}
-              className={`flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-slate-800 last:border-b-0 ${
+              className={`flex items-center justify-between px-3 py-2 border-b border-black/10 last:border-b-0 ${
                 used ? 'opacity-35' : ''
               }`}
             >
               <span
                 className={`text-xs font-semibold truncate pr-1 ${
                   isGood && !used
-                    ? 'text-slate-700 dark:text-slate-200'
-                    : 'text-slate-400 dark:text-slate-600'
+                    ? 'text-black'
+                    : 'text-black/45'
                 }`}
               >
                 {cat.name}
@@ -236,8 +236,8 @@ function SuggestionSection({
               <span
                 className={`text-sm font-black shrink-0 ${
                   isGood && !used
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-slate-300 dark:text-slate-600'
+                    ? 'text-black'
+                    : 'text-black/30'
                 }`}
               >
                 {score}

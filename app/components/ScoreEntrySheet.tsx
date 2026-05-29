@@ -36,22 +36,22 @@ export default function ScoreEntrySheet({
   return (
     <>
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[90]"
+        className="fixed inset-0 z-[90] bg-black/45"
         onClick={onClose}
       />
-      <div className="fixed bottom-0 left-0 right-0 z-[100] mx-auto max-w-screen-md rounded-t-2xl border-t-2 border-slate-100 bg-white/95 p-4 pb-24 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] backdrop-blur-md animate-in slide-in-from-bottom-full dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] mx-auto max-w-screen-md border-x border-t border-black/30 bg-[#f7f7f2] p-4 pb-24 text-black shadow-[0_-10px_30px_rgba(0,0,0,0.22)] animate-in slide-in-from-bottom-full">
         <div className="mb-4">
-          <p className="mb-2 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+          <p className="mb-2 text-center text-[11px] font-bold uppercase tracking-[0.2em] text-black/65">
             {title}
           </p>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 py-3 text-center text-4xl font-black tracking-tight text-blue-600 shadow-inner dark:border-slate-800 dark:bg-slate-950 dark:text-blue-400">
+          <div className="border border-black/25 bg-white py-3 text-center text-4xl font-black tracking-tight text-black shadow-inner">
             {displayValue || '-'}
           </div>
           {headerExtra}
           {validationMessage !== undefined && (
             <p
               className={`mt-2 text-center text-sm font-bold ${
-                validationMessage ? 'text-red-500 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'
+                validationMessage ? 'text-black' : 'text-black/70'
               }`}
             >
               {validationMessage || validLabel}
@@ -64,7 +64,7 @@ export default function ScoreEntrySheet({
         <button
           onClick={onSubmit}
           disabled={submitDisabled}
-          className="mt-3 w-full rounded-xl bg-blue-600 py-3.5 text-lg font-bold text-white shadow-md shadow-blue-500/20 transition active:scale-95 disabled:bg-slate-300 disabled:text-slate-400 dark:disabled:bg-slate-800"
+          className="mt-3 w-full border border-black/30 bg-black px-4 py-3.5 text-lg font-black uppercase tracking-[0.08em] text-white transition-colors active:bg-white active:text-black disabled:border-black/15 disabled:bg-[#d9d9d3] disabled:text-black/40"
         >
           {submitLabel}
         </button>

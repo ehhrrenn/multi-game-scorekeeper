@@ -24,16 +24,7 @@ type GameSettings = { target: number; scoreDirection: 'UP' | 'DOWN'; endMode?: '
 
 // --- Helpers ---
 const EMOJIS = ['☞', '✂', '☂', '☎', '✈', '✉', '✍', '✎', '☕', '⚓', '⚙', '⌚', '⌛', '⚖', '⚒', '⚗', '⚐', '⚑', '♟', '♜'];
-const EMOJI_COLORS: Record<string, string> = {
-  '☞': '#f97316', '✂': '#eab308', '☂': '#22c55e', '☎': '#8b5cf6',
-  '✈': '#a855f7', '✉': '#ef4444', '✍': '#3b82f6', '✎': '#ec4899',
-  '☕': '#d946ef', '⚓': '#84cc16', '⚙': '#dc2626', '⌚': '#06b6d4',
-  '⌛': '#94a3b8', '⚖': '#fbbf24', '⚒': '#38bdf8', '⚗': '#64748b',
-  '⚐': '#10b981', '⚑': '#d97706', '♟': '#f59e0b', '♜': '#1e293b'
-};
-
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-const getPlayerColor = (emoji: string) => EMOJI_COLORS[emoji] || '#3b82f6';
 const pseudoRandom = (seed: number) => {
   const x = Math.sin(seed * 12.9898) * 43758.5453;
   return x - Math.floor(x);
@@ -716,6 +707,18 @@ const allAvailablePlayers = useMemo(() => {
     ? `${gridWinConditionLabel} • ${gridEndLabel} • Round ${Math.max(rounds.length, 1)} of ${settings.roundLimit}`
     : `${gridWinConditionLabel} • ${gridEndLabel} • Round ${Math.max(rounds.length, 1)}`;
 
+  const graphLineStyles = useMemo(() => {
+    const shades = ['#111111', '#2e2e2e', '#4a4a4a', '#666666', '#7a7a7a', '#909090', '#3a3a3a', '#555555'];
+    const widths = [4, 3.5, 3.5, 3, 3, 2.5, 2.5, 2];
+    const dashes = ['', '10 6', '4 4', '14 6 2 6', '2 4', '12 4', '8 3 2 3', '1 4'];
+
+    return players.map((_, index) => ({
+      stroke: shades[index % shades.length],
+      strokeWidth: widths[index % widths.length],
+      strokeDasharray: dashes[index % dashes.length]
+    }));
+  }, [players]);
+
   return (
     <main className="min-h-screen newsprint-page text-[#111] pb-32 transition-colors">
       
@@ -768,14 +771,14 @@ const allAvailablePlayers = useMemo(() => {
                 <button 
                   key={profile.name} 
                   onClick={() => applyProfileToSetup(profile)} 
-                  className={`whitespace-nowrap px-5 py-2.5 rounded-full text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-black text-white border-black' : 'bg-white text-black/70 border-black/20 hover:border-black'}`}
+                  className={`whitespace-nowrap px-5 py-2.5 rounded-none text-sm font-bold transition-all border ${activeGameName === profile.name ? 'bg-black text-white border-black' : 'bg-white text-black/70 border-black/20 hover:border-black'}`}
                 >
                   {profile.name}
                 </button>
               ))}
               <button 
                 onClick={() => setIsCreatingGame(true)} 
-                className="whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold text-black bg-white border border-black/20 transition-all hover:border-black"
+                className="whitespace-nowrap px-4 py-2.5 rounded-none text-sm font-black uppercase tracking-[0.08em] text-white bg-black border border-black transition-colors hover:bg-white hover:text-black"
               >
                 + New
               </button>
@@ -925,22 +928,22 @@ const allAvailablePlayers = useMemo(() => {
                 {customHeaderSubtitle}
               </p>
             </div>
-            <button onClick={() => setViewMode('SETUP')} className="w-10 h-10 bg-white border border-black/20 text-black rounded-full flex items-center justify-center text-xl active:scale-95 transition">✶</button>
+            <button onClick={() => setViewMode('SETUP')} className="h-10 px-3 bg-white border border-black/20 text-black rounded-none flex items-center justify-center text-sm font-bold active:scale-95 transition">Game Setup</button>
           </div>
 
           <div className="pt-16 px-4">
              <div className="sticky top-16 z-40 bg-[#f6f6f2]/95 backdrop-blur-md pt-2 pb-3 mb-3">
-              <div className="flex bg-black/5 p-1 rounded-xl">
-                <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-white text-black shadow-sm' : 'text-black/60'}`}>Score Grid</button>
-                <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-white text-black shadow-sm' : 'text-black/60'}`}>Live Graph</button>
+              <div className="flex bg-white border border-black/20 p-1 rounded-none">
+                <button onClick={() => setViewMode('GRID')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${viewMode === 'GRID' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Score Grid</button>
+                <button onClick={() => setViewMode('GRAPH')} className={`flex-1 py-2 rounded-none text-sm font-bold transition-all ${viewMode === 'GRAPH' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>Live Graph</button>
               </div>
             </div>
 
             {viewMode === 'GRID' && (
               <div className="animate-in fade-in pb-60">
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden mb-8">
+                <div className="bg-white border border-black/20 rounded-none overflow-hidden mb-8">
                   <div className="overflow-x-auto overflow-y-visible scrollbar-hide">
-                    <table className="w-full table-fixed min-w-max">
+                    <table className="w-full table-fixed min-w-max border-collapse">
                       <colgroup>
                         <col className="w-16" />
                         {validPlayers.map((p) => (
@@ -949,20 +952,20 @@ const allAvailablePlayers = useMemo(() => {
                       </colgroup>
                       <thead>
                         <tr>
-                          <th className="w-16 sticky left-0 top-0 z-30 bg-slate-50/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-r border-slate-200 dark:border-slate-700 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          <th className="w-16 sticky left-0 top-0 z-30 bg-[#f6f6f2] border border-black/10 py-3 text-xs font-bold text-black/55 uppercase tracking-wider">
                             Rnd
                           </th>
                           {validPlayers.map((p) => (
-                            <th key={p.id} className="w-28 sticky top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 p-3">
+                            <th key={p.id} className="w-28 sticky top-0 z-20 bg-white/95 border border-black/10 p-3">
                               <div className="flex flex-col items-center gap-1">
-                                <div className="w-10 h-10 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full flex items-center justify-center text-xl overflow-hidden shadow-sm">
+                                <div className="w-10 h-10 bg-[#f6f6f2] border border-black/20 rounded-none flex items-center justify-center text-xl overflow-hidden">
                                   {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                                    <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized className="w-full h-full object-cover rounded-full" />
+                                    <Image src={p.photoURL} alt={p.name} width={40} height={40} unoptimized className="w-full h-full object-cover rounded-none" />
                                   ) : (
                                     <span>{p.emoji || '☞'}</span>
                                   )}
                                 </div>
-                                <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 uppercase tracking-wide truncate w-full text-center">
+                                <div className="text-[11px] font-black text-black uppercase tracking-wide truncate w-full text-center">
                                   {p.isCloudUser ? formatFirstName(p.name) : p.name.split(' ')[0]}
                                 </div>
                               </div>
@@ -973,11 +976,11 @@ const allAvailablePlayers = useMemo(() => {
                     
                     <tbody>
                       {rounds.map(round => (
-                        <tr key={round.roundId} className="border-b dark:border-slate-800 bg-white dark:bg-slate-900">
-                          <td className="w-16 p-2 border-r dark:border-slate-800 align-middle bg-slate-50 dark:bg-slate-950/50 sticky left-0 z-10">
+                        <tr key={round.roundId} className="bg-white">
+                          <td className="w-16 p-2 border border-black/10 align-middle bg-[#f6f6f2] sticky left-0 z-10">
                             <div className="flex items-center justify-between px-1">
-                              <span className="text-slate-500 dark:text-slate-400 font-bold ml-1">{round.roundId}</span>
-                              <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-slate-300 dark:text-slate-600 hover:text-red-500 px-1">✕</button>
+                              <span className="text-black/65 font-bold ml-1">{round.roundId}</span>
+                              <button onClick={e => { e.stopPropagation(); removeRound(round.roundId); }} className="text-black/35 hover:text-black px-1">✕</button>
                             </div>
                           </td>
                           {validPlayers.map(p => {
@@ -986,23 +989,23 @@ const allAvailablePlayers = useMemo(() => {
                               <td 
                                 key={p.id} 
                                 onClick={() => handleCellTap(round.roundId, p.id)} 
-                                className={`w-28 p-4 text-xl font-medium text-center border-l border-slate-50 dark:border-slate-800 ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500 ring-inset' : 'active:bg-slate-50 dark:active:bg-slate-800'}`}
+                                className={`w-28 p-4 text-xl font-medium text-center border border-black/10 ${isSelected ? 'bg-black/5 ring-2 ring-black ring-inset' : 'active:bg-black/5'}`}
                               >
-                                {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-slate-200 dark:text-slate-700">-</span>}
+                                {round.scores[p.id] !== undefined ? round.scores[p.id] : <span className="text-black/25">-</span>}
                               </td>
                             );
                           })}
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-slate-800 dark:bg-slate-900 text-white border-t dark:border-slate-700">
+                    <tfoot className="bg-black text-white border-t border-black">
                       <tr>
-                        <td className="w-16 p-4 font-bold border-r border-slate-700 dark:border-slate-800 text-xs uppercase opacity-50 text-center sticky left-0 z-10 bg-slate-800 dark:bg-slate-900">Tot</td>
+                        <td className="w-16 p-4 font-bold border-r border-white/10 text-xs uppercase opacity-60 text-center sticky left-0 z-10 bg-black">Tot</td>
                         {validPlayers.map((p) => {
                           const total = calculateTotal(p.id);
                           const isWinner = isRoundComplete && leadingScore !== null && total === leadingScore;
                           return (
-                            <td key={p.id} className={`w-28 p-4 font-black text-xl text-center ${isWinner ? 'text-green-400' : ''}`}>
+                            <td key={p.id} className={`w-28 p-4 font-black text-xl text-center ${isWinner ? 'text-white' : ''}`}>
                               {total}
                             </td>
                           );
@@ -1013,31 +1016,31 @@ const allAvailablePlayers = useMemo(() => {
                 </div>
 
                 <div className="fixed bottom-[calc(116px+env(safe-area-inset-bottom))] left-0 right-0 z-40 mx-auto w-full max-w-screen-md px-4">
-                  <div className="rounded-xl border border-black/20 bg-[#f6f6f2]/95 p-3 backdrop-blur-md">
+                  <div className="rounded-none border border-black/20 bg-[#f6f6f2]/95 p-3 backdrop-blur-md">
                     <div className="flex flex-row gap-2">
                       {isGameOver ? (
                         <button
                           onClick={handleStartNewGame}
-                          className="flex-1 bg-black text-white p-4 rounded-xl font-black transition-colors"
+                          className="flex-1 bg-black text-white p-4 rounded-none font-black transition-colors"
                         >
                           ↻ Start New
                         </button>
                       ) : (
-                        <button onClick={addRound} className="flex-1 bg-white border-2 border-black/20 p-3.5 rounded-xl font-bold active:bg-black/5 transition-colors">
+                        <button onClick={addRound} className="flex-1 bg-white border-2 border-black/20 p-3.5 rounded-none font-bold active:bg-black/5 transition-colors">
                           + Round
                         </button>
                       )}
                       {isGameOver && (
                         <button
                           onClick={handleShare}
-                          className="bg-white border border-black/20 text-black p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                          className="bg-white border border-black/20 text-black p-4 rounded-none font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
                         >
                           ⇪ Share
                         </button>
                       )}
                       <button
                         onClick={handleSaveAndClose}
-                        className={`flex-1 p-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${isGameOver ? 'bg-black text-white' : 'bg-black text-white'}`}
+                        className={`flex-1 p-4 rounded-none font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${isGameOver ? 'bg-black text-white' : 'bg-black text-white'}`}
                       >
                         {isGameOver ? 'Finish & Close' : 'Finish & Close'}
                       </button>
@@ -1049,24 +1052,33 @@ const allAvailablePlayers = useMemo(() => {
             
             {viewMode === 'GRAPH' && (
               <div className="animate-in fade-in">
-                <div className="flex flex-wrap gap-3 mb-4 justify-center bg-white dark:bg-slate-900 p-3 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
-                  {players.map(p => (
-                    <div key={p.id} className="flex items-center gap-1.5 text-sm font-bold bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-full border border-slate-100 dark:border-slate-700/50">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlayerColor(p.emoji) }}></div>
-                      <span>{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-                          <Image src={p.photoURL} alt={p.name} width={16} height={16} unoptimized className="w-4 h-4 object-cover rounded-full" />
-                        ) : (
-                          <span>{p.emoji || '☞'}</span>
-                        )}</span>
+                <div className="flex flex-wrap gap-3 mb-4 justify-center bg-[#fbfbf8] p-3 rounded-none border border-black/20">
+                  {players.map((p, index) => (
+                    <div key={p.id} className="flex items-center gap-2 text-sm font-bold bg-white px-2 py-1 rounded-none border border-black/20">
+                      <svg width="28" height="12" viewBox="0 0 28 12" aria-hidden="true">
+                        <line
+                          x1="1"
+                          y1="6"
+                          x2="27"
+                          y2="6"
+                          stroke={graphLineStyles[index]?.stroke}
+                          strokeWidth={graphLineStyles[index]?.strokeWidth}
+                          strokeDasharray={graphLineStyles[index]?.strokeDasharray || undefined}
+                          strokeLinecap="butt"
+                        />
+                      </svg>
+                      <span>{p.isCloudUser ? formatFirstName(p.name) : p.name.split(' ')[0] || p.name}</span>
                     </div>
                   ))}
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="bg-white p-4 rounded-none border border-black/20 overflow-hidden">
                   
                   {/* Expanded SVG viewBox to 480 wide to leave 80px room on the right for labels */}
                   <svg viewBox={`0 -20 480 240`} className="w-full h-auto overflow-visible">
                     {(() => {
-                      const pointsData = players.map(p => {
+                      const roundCount = Math.max(rounds.length, 1);
+                      const xForRound = (roundNumber: number) => (roundNumber / roundCount) * 400;
+                      const pointsData = players.map((p, index) => {
                         let runningTotal = settings.scoreDirection === 'DOWN' ? settings.target : 0;
                         const points = [runningTotal];
                         rounds.forEach(r => {
@@ -1074,7 +1086,14 @@ const allAvailablePlayers = useMemo(() => {
                           else runningTotal += (r.scores[p.id] || 0);
                           points.push(runningTotal);
                         });
-                        return { color: getPlayerColor(p.emoji), emoji: p.emoji, finalScore: runningTotal, points };
+                        return {
+                          name: p.isCloudUser ? formatFirstName(p.name) : p.name.split(' ')[0] || p.name,
+                          color: graphLineStyles[index]?.stroke || '#111111',
+                          strokeWidth: graphLineStyles[index]?.strokeWidth || 3,
+                          strokeDasharray: graphLineStyles[index]?.strokeDasharray || '',
+                          finalScore: runningTotal,
+                          points
+                        };
                       });
                       
                       const allScores = pointsData.flatMap(d => d.points);
@@ -1097,12 +1116,52 @@ const allAvailablePlayers = useMemo(() => {
 
                       return (
                         <>
+                          {/* X-axis Round Grid */}
+                          {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                            <line
+                              key={`x-grid-${roundNumber}`}
+                              x1={xForRound(roundNumber)}
+                              y1="0"
+                              x2={xForRound(roundNumber)}
+                              y2="200"
+                              stroke="#d1d1cb"
+                              strokeWidth="1"
+                            />
+                          ))}
+
                           {/* Zero Line */}
-                          {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#cbd5e1" strokeDasharray="4" />}
+                          {min < 0 && <line x1="0" y1={200 - ((0 - min) / range) * 200} x2="400" y2={200 - ((0 - min) / range) * 200} stroke="#7a7a7a" strokeDasharray="4" />}
+
+                          {/* X-axis Baseline */}
+                          <line x1="0" y1="200" x2="400" y2="200" stroke="#6f6f69" strokeWidth="1.2" />
+
+                          {/* X-axis Round Labels */}
+                          {Array.from({ length: roundCount }, (_, idx) => idx + 1).map((roundNumber) => (
+                            <text
+                              key={`x-label-${roundNumber}`}
+                              x={xForRound(roundNumber)}
+                              y="216"
+                              textAnchor="middle"
+                              fill="#4a4a44"
+                              fontSize="11"
+                              fontWeight="700"
+                            >
+                              R{roundNumber}
+                            </text>
+                          ))}
                           
                           {/* The Lines */}
                           {pointsData.map((d, i) => (
-                            <polyline key={`line-${i}`} points={d.points.map((s, idx) => `${(idx / rounds.length) * 400},${200 - ((s - min) / range) * 200}`).join(' ')} fill="none" stroke={d.color} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-sm" />
+                            <polyline
+                              key={`line-${i}`}
+                              points={d.points.map((s, idx) => `${(idx / roundCount) * 400},${200 - ((s - min) / range) * 200}`).join(' ')}
+                              fill="none"
+                              stroke={d.color}
+                              strokeWidth={d.strokeWidth}
+                              strokeDasharray={d.strokeDasharray || undefined}
+                              strokeLinecap="butt"
+                              strokeLinejoin="miter"
+                            />
                           ))}
 
                           {/* The Collision-Detected Labels */}
@@ -1114,9 +1173,9 @@ const allAvailablePlayers = useMemo(() => {
                                fill={d.color}
                                fontSize="14"
                                fontWeight="bold"
-                               className="drop-shadow-sm"
+                               className=""
                              >
-                               {d.finalScore} {d.emoji}
+                               {d.name} {d.finalScore}
                              </text>
                           ))}
                         </>
@@ -1146,7 +1205,7 @@ const allAvailablePlayers = useMemo(() => {
             <button
               key={num}
               onClick={() => setInputValue(p => p === '0' ? num.toString() : p === '-' ? '-' + num : p + num)}
-              className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700 transition-colors"
+              className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
             >
               {num}
             </button>
@@ -1155,19 +1214,19 @@ const allAvailablePlayers = useMemo(() => {
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => setInputValue(p => p === '0' ? '-' : p === '-' ? '0' : p.startsWith('-') ? p.substring(1) : '-' + p)}
-            className="bg-slate-200 dark:bg-slate-700 py-3 rounded-xl text-lg font-bold active:bg-slate-300 dark:active:bg-slate-600 text-slate-700 dark:text-slate-200"
+            className="border border-black/20 bg-[#e2e2dc] py-3 text-lg font-black text-black transition-colors active:bg-black active:text-white"
           >
             +/-
           </button>
           <button
             onClick={() => setInputValue(p => p === '0' || p === '-' ? p : p + '0')}
-            className="bg-slate-100 dark:bg-slate-800 py-3 rounded-xl text-xl font-semibold active:bg-slate-200 dark:active:bg-slate-700"
+            className="border border-black/20 bg-white py-3 text-xl font-black transition-colors active:bg-black active:text-white"
           >
             0
           </button>
           <button
             onClick={() => setInputValue(p => p.slice(0, -1) || '0')}
-            className="bg-red-50 dark:bg-red-900/20 text-red-500 py-3 rounded-xl text-xl font-bold active:bg-red-100 dark:active:bg-red-900/40 transition-all active:scale-95"
+            className="border border-black/20 bg-[#ecece7] py-3 text-xl font-black text-black transition-colors active:bg-black active:text-white"
           >
             ⌫
           </button>

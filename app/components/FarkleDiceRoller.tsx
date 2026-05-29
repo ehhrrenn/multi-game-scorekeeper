@@ -145,8 +145,8 @@ export default function FarkleDiceRoller() {
   const phaseMessage = (() => {
     if (phase === 'idle') return 'Tap Roll to start your turn';
     if (phase === 'rolling') return 'Rolling…';
-    if (phase === 'farkled') return '💥 Farkle! No scoring dice — turn over.';
-    if (phase === 'hot-dice') return '🔥 Hot Dice! Rolling all six again…';
+    if (phase === 'farkled') return 'Farkle! No scoring dice - turn over.';
+    if (phase === 'hot-dice') return '⚅ Hot Dice! Rolling all six again...';
     if (phase === 'scored') {
       if (heldDice.length === 0) return 'Tap scoring dice to hold them';
       if (newlyHeld.length === 0) return 'Hold at least one new die to roll again';
@@ -158,11 +158,11 @@ export default function FarkleDiceRoller() {
   return (
     <div className="flex flex-col gap-4">
       {/* Turn total */}
-      <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-3 text-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">
+      <div className="border border-black/20 bg-white py-3 text-center">
+        <p className="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-black/55">
           Turn Total
         </p>
-        <p className="text-3xl font-black text-blue-600 dark:text-blue-400">
+        <p className="text-3xl font-black text-black">
           {displayTotal > 0 ? displayTotal.toLocaleString() : '—'}
         </p>
       </div>
@@ -190,10 +190,10 @@ export default function FarkleDiceRoller() {
       <p
         className={`text-center text-sm font-semibold min-h-[1.25rem] ${
           phase === 'farkled'
-            ? 'text-red-500 dark:text-red-400'
+            ? 'text-black'
             : phase === 'hot-dice'
-            ? 'text-amber-500 dark:text-amber-400'
-            : 'text-slate-500 dark:text-slate-400'
+            ? 'text-black/80'
+            : 'text-black/55'
         }`}
       >
         {phaseMessage}
@@ -204,9 +204,9 @@ export default function FarkleDiceRoller() {
         {phase === 'idle' && (
           <button
             onClick={handleFirstRoll}
-            className="w-full rounded-xl bg-blue-600 py-3.5 text-lg font-bold text-white shadow-md shadow-blue-500/20 transition active:scale-95"
+            className="w-full border border-black/30 bg-black py-3.5 text-lg font-black text-white transition active:scale-95"
           >
-            🎲 Roll Dice
+            ⚂ Roll Dice
           </button>
         )}
 
@@ -215,12 +215,12 @@ export default function FarkleDiceRoller() {
             <button
               onClick={handleRollAgain}
               disabled={!canRollAgain}
-              className="w-full rounded-xl bg-blue-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/20 transition active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800"
+              className="w-full border border-black/30 bg-black py-3 text-base font-black text-white transition active:scale-95 disabled:border-black/15 disabled:bg-[#d9d9d3] disabled:text-black/35"
             >
-              🎲 Roll Again ({6 - heldDice.length} dice)
+              ⚂ Roll Again ({6 - heldDice.length} dice)
             </button>
             {canBank && (
-              <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+              <p className="text-center text-xs text-black/55">
                 Bank {displayTotal.toLocaleString()} pts — enter your score manually above
               </p>
             )}
@@ -230,7 +230,7 @@ export default function FarkleDiceRoller() {
         {phase === 'farkled' && (
           <button
             onClick={handleReset}
-            className="w-full rounded-xl bg-red-500 py-3 text-base font-bold text-white transition active:scale-95"
+            className="w-full border border-black/30 bg-black py-3 text-base font-black text-white transition active:scale-95"
           >
             Start New Turn
           </button>
@@ -239,7 +239,7 @@ export default function FarkleDiceRoller() {
         {(phase === 'scored' || phase === 'idle') && phase !== 'idle' && (
           <button
             onClick={handleReset}
-            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-300 transition active:scale-95"
+            className="w-full border border-black/20 bg-white py-2.5 text-sm font-bold text-black/70 transition active:scale-95"
           >
             Reset Turn
           </button>
@@ -248,7 +248,7 @@ export default function FarkleDiceRoller() {
 
       {/* Hint */}
       {phase === 'scored' && (
-        <p className="text-center text-xs text-slate-400 dark:text-slate-500">
+        <p className="text-center text-xs text-black/55">
           Tap a die to hold it • Gold dice are set aside
         </p>
       )}

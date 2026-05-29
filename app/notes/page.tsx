@@ -89,19 +89,19 @@ export default function NotesPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
-      <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800">
-        <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-black">Shared Notes</h1>
-          <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
+    <main className="min-h-screen newsprint-page pb-32 text-black animate-in fade-in slide-in-from-bottom-2">
+      <div className="sticky top-0 z-40 border-b border-black/20 bg-[#f8f8f5]/95 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-screen-md items-center justify-between px-4">
+          <h1 className="text-2xl font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Shared Notes</h1>
+          <span className="border border-black/20 bg-white px-3 py-1 text-xs font-black uppercase tracking-[0.08em] text-black/70">
             {remainingCount} Remaining
           </span>
         </div>
       </div>
 
-      <section className="max-w-screen-md mx-auto p-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm mb-4">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Add Shared Note</label>
+      <section className="mx-auto max-w-screen-md p-4">
+        <div className="mb-4 border border-black/20 bg-[#f6f6f2] p-4">
+          <label className="mb-2 block text-[10px] font-bold uppercase tracking-[0.18em] text-black/55">Add Shared Note</label>
           <div className="flex gap-2">
             <input
               value={newNote}
@@ -112,11 +112,11 @@ export default function NotesPage() {
                 }
               }}
               placeholder="Milk, score sheets, snacks..."
-              className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-blue-500"
+              className="flex-1 border border-black/20 bg-white px-3 py-2.5 font-bold text-black outline-none focus:border-black"
             />
             <button
               onClick={() => void addNote()}
-              className="bg-blue-600 text-white px-4 rounded-xl font-black shadow-sm active:scale-95 transition-all"
+              className="border border-black/30 bg-black px-4 font-black uppercase tracking-[0.08em] text-white transition-colors active:bg-white active:text-black"
             >
               Add
             </button>
@@ -124,11 +124,11 @@ export default function NotesPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 text-center text-slate-500 dark:text-slate-400 font-medium">
+          <div className="border border-black/20 bg-white p-6 text-center font-bold text-black/60">
             Loading shared notes...
           </div>
         ) : notes.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 p-8 text-center text-slate-500 dark:text-slate-400 font-medium">
+          <div className="border border-dashed border-black/30 bg-[#efefe9] p-8 text-center font-bold text-black/60">
             No notes yet. Add one for everyone.
           </div>
         ) : (
@@ -136,20 +136,20 @@ export default function NotesPage() {
             {notes.map((note) => (
               <div
                 key={note.id}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-sm flex items-center gap-3"
+                className="flex items-center gap-3 border border-black/20 bg-white p-3"
               >
                 <button
                   onClick={() => void toggleNote(note.id)}
-                  className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-sm font-black transition-all active:scale-95 ${note.checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'}`}
+                  className={`flex h-8 w-8 items-center justify-center border text-sm font-black transition-colors active:bg-black active:text-white ${note.checked ? 'border-black bg-black text-white' : 'border-black/25 bg-[#f6f6f2] text-transparent'}`}
                 >
                   ✓
                 </button>
-                <p className={`flex-1 font-bold ${note.checked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'}`}>
+                <p className={`flex-1 font-bold ${note.checked ? 'text-black/40 line-through' : 'text-black'}`}>
                   {note.text}
                 </p>
                 <button
                   onClick={() => void deleteNote(note.id)}
-                  className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 font-black active:scale-95 transition-all"
+                  className="h-9 w-9 border border-black/20 bg-[#ecece7] text-black font-black transition-colors active:bg-black active:text-white"
                   aria-label="Delete note"
                 >
                   ✕
