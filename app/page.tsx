@@ -245,23 +245,25 @@ export default function Home() {
         {/* DIALOG FOR ACTIVE GAME */}
         {showDialog && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm animate-in fade-in" onClick={() => setShowDialog(false)} />
-            <div className="relative w-full max-w-sm bg-[#f8f8f5] border-2 border-black/80 rounded-[1.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="text-4xl text-center mb-4">❗</div>
-              <h3 className="text-2xl font-black mb-2 text-[#111] text-center [font-family:Georgia,'Times_New_Roman',serif]">Active Game Found</h3>
-              <p className="text-black/70 text-center mb-8 leading-relaxed font-medium">
+            <div className="absolute inset-0 bg-black/60 animate-in fade-in" onClick={() => setShowDialog(false)} />
+            <div className="relative w-full max-w-md border-[3px] border-black bg-[#f7f5ee] p-0 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-200">
+              <div className="px-7 py-7">
+                <div className="text-4xl text-center mb-3">❗</div>
+                <h3 className="text-3xl font-black mb-3 text-[#111] text-center uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Active Game Found</h3>
+                <p className="text-black/75 text-center mb-7 leading-relaxed font-semibold">
                 {activeSession?.gameType
                   ? `A ${activeSession.gameType === 'custom' ? 'Custom Game' : activeSession.gameType === 'yahtzee' ? 'Yahtzee' : 'Farkle'} game is already in progress. Save it first, or discard it to start fresh.`
                   : 'A game is already in progress. Save it first, or discard it to start fresh.'}
-              </p>
-              <div className="flex flex-col gap-3">
-                <button onClick={() => void saveAndStartNew()} className="w-full bg-black text-white py-4 rounded-xl font-black active:scale-95 transition border border-black">
-                  ✶ Save & Start New
-                </button>
-                <button onClick={deleteAndStartNew} className="w-full bg-white text-black border border-black/35 py-4 rounded-xl font-black active:bg-black/5 transition">
-                  ✕ Discard & Start New
-                </button>
-                <button onClick={() => setShowDialog(false)} className="w-full text-black/55 hover:text-black font-bold py-3 mt-2">
+                </p>
+                <div className="flex flex-col gap-2 border-t-2 border-b-2 border-black py-3">
+                  <button onClick={() => void saveAndStartNew()} className="w-full bg-black text-white py-3 font-black uppercase tracking-[0.08em] active:translate-y-px transition border border-black">
+                    Save and Start New
+                  </button>
+                  <button onClick={deleteAndStartNew} className="w-full bg-[#fdfcf8] text-black border border-black py-3 font-black uppercase tracking-[0.08em] active:bg-black/5 transition">
+                    Discard and Start New
+                  </button>
+                </div>
+                <button onClick={() => setShowDialog(false)} className="w-full text-black/65 hover:text-black font-bold uppercase tracking-[0.1em] py-3 mt-3">
                   Cancel
                 </button>
               </div>

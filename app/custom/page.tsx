@@ -1,7 +1,7 @@
 // app/custom/page.tsx
 'use client';
 
-import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
+import { Suspense, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useGameState } from '../../hooks/useGameState';
@@ -85,6 +85,7 @@ function CustomTrackerContent() {
   const [winnerEmoji, setWinnerEmoji] = useState<string>('🏆');
   const [gridEditVersion, setGridEditVersion] = useState(0);
   const [showSessionConflict, setShowSessionConflict] = useState(false);
+  const hydratedSetupGameRef = useRef<string | null>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -146,30 +147,29 @@ const allAvailablePlayers = useMemo(() => {
   );
 
   useEffect(() => {
-    if (viewMode === 'SETUP' && !isGameStarted) {
-      const activeProfile = gameProfiles.find((profile) => profile.name === activeGameName);
-      const lastPlayedOfThisType = gameHistory.find(g => g.gameName === activeGameName);
-      const nextSettings = lastPlayedOfThisType?.settings || {
-        target: activeProfile?.target || 0,
-        scoreDirection: activeProfile?.scoreDirection || 'UP',
-        endMode: activeProfile?.endMode || 'TARGET',
-        roundLimit: activeProfile?.roundLimit || 0
-      };
-      if (
-        settings.target !== nextSettings.target ||
-        settings.scoreDirection !== nextSettings.scoreDirection ||
-        settings.endMode !== nextSettings.endMode ||
-        settings.roundLimit !== nextSettings.roundLimit
-      ) {
-        setSettings(nextSettings);
-      }
-
-      const nextWinCondition = lastPlayedOfThisType?.winCondition || activeProfile?.winCondition || 'HIGH';
-      if (sessionWinCondition !== nextWinCondition) {
-        setSessionWinCondition(nextWinCondition);
-      }
+    if (viewMode !== 'SETUP' || isGameStarted) {
+      return;
     }
-  }, [activeGameName, gameHistory, gameProfiles, isGameStarted, sessionWinCondition, settings, setSessionWinCondition, viewMode, setSettings]);
+
+    if (hydratedSetupGameRef.current === activeGameName) {
+      return;
+    }
+
+    const activeProfile = gameProfiles.find((profile) => profile.name === activeGameName);
+    const lastPlayedOfThisType = gameHistory.find((g) => g.gameName === activeGameName);
+    const nextSettings = lastPlayedOfThisType?.settings || {
+      target: activeProfile?.target || 0,
+      scoreDirection: activeProfile?.scoreDirection || 'UP',
+      endMode: activeProfile?.endMode || 'TARGET',
+      roundLimit: activeProfile?.roundLimit || 0
+    };
+
+    setSettings(nextSettings);
+
+    const nextWinCondition = lastPlayedOfThisType?.winCondition || activeProfile?.winCondition || 'HIGH';
+    setSessionWinCondition(nextWinCondition);
+    hydratedSetupGameRef.current = activeGameName;
+  }, [activeGameName, gameHistory, gameProfiles, isGameStarted, setSessionWinCondition, viewMode, setSettings]);
 
   // Load game from URL parameter for editing
   useEffect(() => {
@@ -813,8 +813,8 @@ const allAvailablePlayers = useMemo(() => {
             <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-5 mb-8 space-y-4">
               <label className="text-xs font-bold text-black/55 uppercase tracking-widest block">Win Condition</label>
               <div className="grid grid-cols-2 border border-black/20 bg-white">
-                <button onClick={() => { setSessionWinCondition('HIGH'); setSettings((prev) => ({ ...prev, scoreDirection: 'UP' })); }} className={`py-2.5 text-sm font-bold transition-all border-r border-black/20 ${currentWinCondition === 'HIGH' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>High Score</button>
-                <button onClick={() => { setSessionWinCondition('LOW'); setSettings((prev) => ({ ...prev, scoreDirection: 'DOWN' })); }} className={`py-2.5 text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Low Score</button>
+                <button onClick={() => setSessionWinCondition('HIGH')} className={`py-2.5 text-sm font-bold transition-all border-r border-black/20 ${currentWinCondition === 'HIGH' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>High Score</button>
+                <button onClick={() => setSessionWinCondition('LOW')} className={`py-2.5 text-sm font-bold transition-all ${currentWinCondition === 'LOW' ? 'bg-black text-white' : 'text-black/70 hover:bg-black/5'}`}>Low Score</button>
               </div>
 
               <div>
