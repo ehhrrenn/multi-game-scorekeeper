@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { collection, getDocs, type Firestore } from 'firebase/firestore';
 import { useGameState } from './useGameState';
+import { useAuth } from './useAuth';
 import { db } from '../lib/firebase';
 import {
   DEFAULT_GAME_PROFILE,
@@ -32,9 +33,10 @@ function serializeProfiles(profiles: GameProfile[]): string {
 export function useGameProfilesSync() {
   const [localProfiles, setLocalProfiles] = useGameState<GameProfile[]>('scorekeeper_game_profiles', [DEFAULT_GAME_PROFILE]);
   const gameProfiles = useMemo(() => dedupeGameProfiles(localProfiles), [localProfiles]);
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    if (!db) {
+    if (!db || authLoading || !user) {
       return;
     }
     const firestore: Firestore = db;
@@ -76,7 +78,7 @@ export function useGameProfilesSync() {
     return () => {
       cancelled = true;
     };
-  }, [gameProfiles, localProfiles, setLocalProfiles]);
+  }, [gameProfiles, localProfiles, setLocalProfiles, authLoading, user]);
 
   const setGameProfiles = useCallback((nextProfiles: SetGameProfilesInput) => {
     setLocalProfiles((prevProfiles) => {
@@ -87,7 +89,7 @@ export function useGameProfilesSync() {
 
       const normalizedProfiles = dedupeGameProfiles(resolvedProfiles);
 
-      if (db) {
+      if (db && user) {
         upsertCloudGameProfiles(db, normalizedProfiles).catch((error) => {
           console.error('Error saving game profiles to cloud:', error);
         });
@@ -95,7 +97,7 @@ export function useGameProfilesSync() {
 
       return normalizedProfiles;
     });
-  }, [setLocalProfiles]);
+  }, [setLocalProfiles, user]);
 
   return useMemo(() => ({
     gameProfiles,

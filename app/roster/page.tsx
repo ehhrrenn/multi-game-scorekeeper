@@ -10,6 +10,7 @@ import { db } from '../../lib/firebase';
 import { useGameProfilesSync } from '../../hooks/useGameProfilesSync';
 import { getWinnerIdsForRecord, isGameCompleted } from '../../lib/gameHistory';
 import { useGameState } from '../../hooks/useGameState';
+import { useAuth } from '../../hooks/useAuth';
 
 // --- Types ---
 type Player = { id: string; name: string; emoji: string; photoURL?: string; isGuest?: boolean };
@@ -56,11 +57,16 @@ export default function RosterPage() {
   const [localPlayers] = useGameState<Player[]>('scorekeeper_global_roster', []);
   const [localHistory] = useGameState<MatchRecord[]>('scorekeeper_history', []);
   const { gameProfiles } = useGameProfilesSync();
+  const { user, loading: authLoading } = useAuth();
 
-  // 3. Fetch from Firestore on mount
+  // 3. Fetch from Firestore on mount (once auth state is known)
   useEffect(() => {
     async function fetchCloudData() {
-      if (!db) {
+      if (authLoading) {
+        return;
+      }
+
+      if (!db || !user) {
         setCloudPlayers([]);
         setCloudHistory([]);
         setLoading(false);
@@ -83,7 +89,7 @@ export default function RosterPage() {
     }
 
     fetchCloudData();
-  }, []);
+  }, [authLoading, user]);
 
   // 4. Merge Local and Cloud Data safely
   const allPlayers = useMemo(() => {
@@ -181,7 +187,7 @@ export default function RosterPage() {
 return (
     <div className="min-h-screen bg-[#f6f6f2] text-[#111] pb-32 transition-colors newsprint-page">
       
-      <div className="sticky top-0 z-40 bg-[#fbfbf8]/95 backdrop-blur-md border-b-2 border-black/25 shadow-[0_4px_0_0_rgba(0,0,0,0.08)]">
+      <div className="sticky top-0 z-40 bg-[#fbfbf8]/95 backdrop-blur-md border-b border-black/20">
         <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
           <h1 className="text-2xl font-black tracking-tight [font-family:Georgia,'Times_New_Roman',serif]">All Players</h1>
           <span className="bg-white text-black px-3 py-1 rounded-none text-xs font-bold border border-black/20 uppercase tracking-[0.18em]">
@@ -203,7 +209,7 @@ return (
         {loading ? (
           <div className="text-center p-8 text-black/55 font-medium">Syncing Cloud Roster...</div>
         ) : playerStats.length === 0 ? (
-          <div className="bg-[#fbfbf8] rounded-none p-8 text-center text-black/55 font-medium border-2 border-black/20 border-dashed">
+          <div className="bg-[#fbfbf8] rounded-none p-8 text-center text-black/55 font-medium border border-black/20 border-dashed">
             No players found. Start a game to add players!
           </div>
         ) : (
@@ -212,16 +218,16 @@ return (
               <Link 
                 key={p.playerId} 
                 href={`/roster/${p.playerId}`}
-                className="block bg-[#fbfbf8] border-2 border-black/20 rounded-none p-4 shadow-[6px_6px_0_0_rgba(0,0,0,0.14)] hover:border-black active:translate-y-px transition-all"
+                className="block bg-[#fbfbf8] border border-black/20 rounded-none p-4 hover:border-black active:translate-y-px transition-all"
               >
                 <div className="flex items-center gap-4 mb-4">
                   
                   {/* Matching Avatar Sizing */}
-                  <div className="w-14 h-14 bg-white border border-black/20 rounded-none flex items-center justify-center text-3xl shadow-sm overflow-hidden flex-shrink-0">
+                  <div className="w-14 h-14 bg-white border border-black/20 rounded-none flex items-center justify-center text-3xl overflow-hidden flex-shrink-0">
                     {p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
                       <Image src={p.photoURL} alt={p.name} width={56} height={56} unoptimized className="w-full h-full object-cover" />
                     ) : (
-                      <span>{DINGBATS[p.playerId.charCodeAt(0) % DINGBATS.length] || p.emoji || '☞'}</span>
+                      <span>{DINGBATS[(p.playerId?.charCodeAt(0) ?? 0) % DINGBATS.length] || p.emoji || '☞'}</span>
                     )}
                   </div>
                   

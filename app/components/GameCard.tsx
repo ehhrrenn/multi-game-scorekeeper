@@ -187,7 +187,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
   })();
 
   return (
-    <div className="bg-[#fbfbf8] border-2 border-black/20 rounded-none shadow-[6px_6px_0_0_rgba(0,0,0,0.14)] overflow-hidden transition-all duration-300">
+    <div className="bg-[#fbfbf8] border border-black/20 rounded-none overflow-hidden transition-all duration-300">
       
       <div onClick={onToggle} className="p-4 cursor-pointer hover:bg-black/5 transition-colors flex flex-col gap-3 relative group">
         <div className="absolute top-4 right-4 text-black/35 group-hover:text-black/55 transition-colors">
@@ -222,7 +222,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           {standings.map(p => (
             <div key={p.id} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-none border text-xs font-bold whitespace-nowrap ${isComplete && winners.some(w => w.id === p.id) ? 'bg-white text-black border-black/20' : 'bg-white text-black/65 border-black/10'}`}>
               <span className="text-sm w-5 h-5 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <Image src={p.photoURL} alt={p.name} width={20} height={20} unoptimized className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={20} height={20} unoptimized className="w-full h-full object-cover rounded-none" />
 ) : (
   <span>{p.emoji || '✤'}</span>
 )}</span>
@@ -257,30 +257,30 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                 <button onClick={cancelDelete} className="bg-white text-black font-bold px-3 rounded-none text-xs transition-all active:translate-y-px uppercase tracking-[0.08em] border border-black/20">Cancel</button>
               </div>
             ) : (
-              <button onClick={handleDeleteClick} className="bg-red-50 dark:bg-red-900/20 text-red-500 font-bold px-4 rounded-xl text-sm transition-all active:scale-95">
-                🗑️
+              <button onClick={handleDeleteClick} className="bg-white text-black font-bold px-4 rounded-none text-sm transition-all active:translate-y-px border border-black/20 uppercase tracking-[0.08em]">
+                ✕
               </button>
             )}
           </div>
 
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4">
-            <button onClick={() => setActiveTab('STANDINGS')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'STANDINGS' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}>🏆 Standings</button>
-            <button onClick={() => setActiveTab('GRID')} disabled={!game.savedRounds || game.savedRounds.length === 0} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'GRID' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 disabled:opacity-30 hover:text-slate-700 dark:hover:text-slate-300'}`}>🧮 Grid</button>
-            <button onClick={() => setActiveTab('GRAPH')} disabled={!canShowRoundGraph && !canShowYahtzeeGraph} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'GRAPH' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 disabled:opacity-30 hover:text-slate-700 dark:hover:text-slate-300'}`}>📈 Graph</button>
+          <div className="flex bg-white p-1 rounded-none mb-4 border border-black/20">
+            <button onClick={() => setActiveTab('STANDINGS')} className={`flex-1 py-1.5 rounded-none text-xs font-bold uppercase tracking-[0.08em] transition-all ${activeTab === 'STANDINGS' ? 'bg-black text-white' : 'text-black/60 hover:bg-black/5'}`}>✪ Standings</button>
+            <button onClick={() => setActiveTab('GRID')} disabled={!game.savedRounds || game.savedRounds.length === 0} className={`flex-1 py-1.5 rounded-none text-xs font-bold uppercase tracking-[0.08em] transition-all ${activeTab === 'GRID' ? 'bg-black text-white' : 'text-black/60 disabled:opacity-30 hover:bg-black/5'}`}>✚ Grid</button>
+            <button onClick={() => setActiveTab('GRAPH')} disabled={!canShowRoundGraph && !canShowYahtzeeGraph} className={`flex-1 py-1.5 rounded-none text-xs font-bold uppercase tracking-[0.08em] transition-all ${activeTab === 'GRAPH' ? 'bg-black text-white' : 'text-black/60 disabled:opacity-30 hover:bg-black/5'}`}>✧ Graph</button>
           </div>
 
           {activeTab === 'STANDINGS' && (
-            <div className="bg-slate-50 dark:bg-slate-950/50 rounded-xl p-3 animate-in fade-in">
+            <div className="bg-white border border-black/20 rounded-none p-3 animate-in fade-in">
               {standings.map((p, i) => (
-                <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0 border-slate-200 dark:border-slate-800">
+                <div key={p.id} className="flex justify-between items-center py-2 border-b last:border-0 border-black/10">
                   <div className="flex items-center gap-3">
-                    <span className={`font-black w-4 text-center ${i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 dark:text-slate-600'}`}>{i + 1}</span>
+                    <span className={`font-black w-4 text-center ${i === 0 ? 'text-black' : i === 1 ? 'text-black/70' : i === 2 ? 'text-black/55' : 'text-black/40'}`}>{i + 1}</span>
                     <span className="text-xl w-7 h-7 flex items-center justify-center overflow-hidden">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-none" />
 ) : (
   <span>{p.emoji || '☞'}</span>
 )}</span>
-                    <span className="font-bold text-slate-700 dark:text-slate-200">{displayPlayerName(p)}</span>
+                    <span className="font-bold text-black">{displayPlayerName(p)}</span>
                   </div>
                   <span className="font-black text-lg">{p.score}</span>
                 </div>
@@ -289,41 +289,41 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           )}
 
           {activeTab === 'GRID' && game.savedRounds && (
-              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 animate-in fade-in overflow-hidden">
+              <div className="rounded-none border border-black/20 bg-white animate-in fade-in overflow-hidden">
                 <div className="overflow-x-auto">
               <table className="w-full text-center text-sm border-collapse">
-                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10">
+                  <thead className="bg-[#f6f6f2] sticky top-0 z-10">
                   <tr>
-                    <th className="p-2 w-12 text-slate-500 border-b border-slate-200 dark:border-slate-700 font-normal">Rnd</th>
+                    <th className="p-2 w-12 text-black/55 border-b border-black/20 font-normal">Rnd</th>
                     {standings.map(p => (
-                      <th key={p.id} className="p-2 border-b border-slate-200 dark:border-slate-700">
+                      <th key={p.id} className="p-2 border-b border-black/20">
                         <div className="text-lg w-7 h-7 flex items-center justify-center overflow-hidden mx-auto">{p.isCloudUser && p.photoURL && !p.useCustomEmoji ? (
-  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-full" />
+  <Image src={p.photoURL} alt={p.name} width={28} height={28} unoptimized className="w-full h-full object-cover rounded-none" />
 ) : (
   <span>{p.emoji || '☞'}</span>
 )}</div>
-                        <div className="text-[10px] font-bold uppercase text-slate-500 truncate max-w-[60px] mx-auto">{displayPlayerName(p)}</div>
+                        <div className="text-[10px] font-bold uppercase text-black/55 truncate max-w-[60px] mx-auto">{displayPlayerName(p)}</div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {game.savedRounds.map((round) => (
-                    <tr key={round.roundId} className="border-b last:border-0 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="p-2 font-bold text-slate-400 border-r border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30">{round.roundId}</td>
+                    <tr key={round.roundId} className="border-b last:border-0 border-black/10 hover:bg-black/5">
+                      <td className="p-2 font-bold text-black/55 border-r border-black/10 bg-[#f6f6f2]">{round.roundId}</td>
                       {standings.map(p => (
-                        <td key={p.id} className="p-2 text-slate-700 dark:text-slate-300 font-medium border-l border-slate-50 dark:border-slate-800/50">
+                        <td key={p.id} className="p-2 text-black font-medium border-l border-black/5">
                           {round.scores[p.id] !== undefined ? round.scores[p.id] : '-'}
                         </td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="bg-slate-50 dark:bg-slate-950 border-t-2 border-slate-200 dark:border-slate-700 shadow-[0_-4px_6px_rgba(0,0,0,0.05)]">
+                <tfoot className="bg-[#f6f6f2] border-t border-black/20">
                   <tr>
-                    <td className="p-2 font-black text-slate-400 uppercase text-[10px] border-r border-slate-200 dark:border-slate-700">Tot</td>
+                    <td className="p-2 font-black text-black/55 uppercase text-[10px] border-r border-black/20">Tot</td>
                     {standings.map(p => (
-                      <td key={p.id} className={`p-2 font-black text-lg ${isComplete && winners.some((winner) => winner.id === p.id) ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                      <td key={p.id} className={`p-2 font-black text-lg ${isComplete && winners.some((winner) => winner.id === p.id) ? 'text-black' : 'text-black'}`}>
                         {p.score}
                       </td>
                     ))}
@@ -335,7 +335,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
           )}
 
           {activeTab === 'GRAPH' && (canShowRoundGraph || canShowYahtzeeGraph) && (
-            <div className="bg-slate-50 dark:bg-slate-950/50 p-4 rounded-xl overflow-hidden animate-in fade-in">
+            <div className="bg-white border border-black/20 p-4 rounded-none overflow-hidden animate-in fade-in">
               <svg viewBox="-40 -10 500 220" className="w-full h-auto overflow-visible">
                 {(() => {
                   const colors = ['#3b82f6', '#ec4899', '#22c55e', '#f97316', '#a855f7', '#8b5cf6', '#ef4444', '#06b6d4'];
@@ -373,7 +373,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                           <polyline key={`line-${i}`} points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')} fill="none" stroke={colors[i % colors.length]} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                         ))}
                         {labelData.map((d, i) => (
-                          <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
+                          <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold">
                             {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0,6)}
                           </text>
                         ))}
@@ -417,7 +417,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
                       ))}
                       {/* ADDED PLAYER NAMES TO GRAPH LABELS */}
                       {labelData.map((d, i) => (
-                        <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold drop-shadow-sm">
+                        <text key={`label-${i}`} x="408" y={d.targetY + 5} fontSize="12" fill={colors[i % colors.length]} className="font-bold">
                           {d.finalScore} {d.emoji} {(d.isCloudUser ? formatFirstName(d.name) : d.name).substring(0,6)}
                         </text>
                       ))}
