@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 // Mocking your global avatar/color list
 const AVATARS = [
@@ -15,6 +16,7 @@ const AVATARS = [
 ];
 
 export default function ChoosyPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<'individual' | 'team'>('individual');
   const [teamCount, setTeamCount] = useState<number>(2);
   
@@ -152,48 +154,59 @@ export default function ChoosyPage() {
   };
 
   return (
-    <div 
-      className="relative w-full h-screen bg-slate-900 overflow-hidden touch-none select-none"
+    <div
+      className="choosy-dark relative w-full h-screen overflow-hidden touch-none select-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      {/* Back Button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); router.push('/'); }}
+        onTouchStart={(e) => e.stopPropagation()}
+        className={`absolute top-4 left-4 z-20 w-10 h-10 rounded-full bg-[#1c1c19] border border-[#f4f1e8]/20 text-[#f4f1e8] hover:border-[#f4f1e8]/60 flex items-center justify-center text-lg active:scale-95 transition-all ${touches.length > 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        aria-label="Back to Home"
+        title="Back to Home"
+      >
+        ‹
+      </button>
+
       {/* Settings Header */}
       <div className={`absolute top-0 w-full p-6 transition-opacity duration-300 z-10 ${touches.length > 0 ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <div 
-          className="max-w-md mx-auto bg-slate-800/80 backdrop-blur-md p-4 rounded-2xl border border-slate-700 shadow-xl"
+        <div
+          className="max-w-md mx-auto bg-[#1c1c19] p-5 border border-[#f4f1e8]/20 rounded-none"
           onTouchStart={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <h1 className="text-2xl font-black text-white text-center mb-4 flex items-center justify-center gap-2">
-            <span>👆</span> Choosy
+          <h1 className="text-2xl font-black text-[#f4f1e8] text-center mb-4 flex items-center justify-center gap-2 [font-family:Georgia,'Times_New_Roman',serif] tracking-tight">
+            <span>☞</span> Choosy
           </h1>
-          
-          <div className="flex bg-slate-900 p-1 rounded-xl mb-4">
-            <button 
+
+          <div className="flex border border-[#f4f1e8]/20 mb-4">
+            <button
               onClick={(e) => { e.stopPropagation(); setMode('individual'); }}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === 'individual' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-colors ${mode === 'individual' ? 'bg-[#f4f1e8] text-[#111]' : 'text-[#f4f1e8]/55 hover:text-[#f4f1e8]'}`}
             >
               Winner
             </button>
-            <button 
+            <button
               onClick={(e) => { e.stopPropagation(); setMode('team'); }}
-              className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mode === 'team' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-[0.1em] transition-colors ${mode === 'team' ? 'bg-[#f4f1e8] text-[#111]' : 'text-[#f4f1e8]/55 hover:text-[#f4f1e8]'}`}
             >
               Teams
             </button>
           </div>
 
           {mode === 'team' && (
-            <div className="flex items-center justify-between px-2">
-              <span className="text-slate-300 font-medium">Number of Teams:</span>
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[#f4f1e8]/70 text-xs font-bold uppercase tracking-[0.1em]">Number of Teams:</span>
               <div className="flex gap-2">
                 {[2, 3, 4].map(num => (
                   <button
                     key={num}
                     onClick={(e) => { e.stopPropagation(); setTeamCount(num); }}
-                    className={`w-10 h-10 rounded-full font-bold transition-all ${teamCount === num ? 'bg-indigo-500 text-white ring-2 ring-indigo-300' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                    className={`w-9 h-9 rounded-full font-black border transition-all ${teamCount === num ? 'bg-[#f4f1e8] text-[#111] border-[#f4f1e8]' : 'bg-transparent text-[#f4f1e8]/70 border-[#f4f1e8]/20 hover:border-[#f4f1e8]/50'}`}
                   >
                     {num}
                   </button>
@@ -201,14 +214,14 @@ export default function ChoosyPage() {
               </div>
             </div>
           )}
-          <p className="text-center text-slate-500 text-sm mt-4 font-medium">Place fingers on screen to choose</p>
+          <p className="text-center text-[#f4f1e8]/45 text-xs font-bold uppercase tracking-[0.14em] mt-4">Place fingers on screen to choose</p>
         </div>
       </div>
 
       {/* 2. THE NEW TAP TO CLEAR TEXT */}
       {winners.length > 0 && (
         <div className="absolute top-12 w-full text-center z-50 animate-in fade-in duration-700 pointer-events-none">
-          <p className="text-slate-400/80 text-sm font-bold tracking-[0.2em] uppercase">Tap anywhere to clear</p>
+          <p className="text-[#f4f1e8]/60 text-xs font-bold tracking-[0.2em] uppercase">Tap anywhere to clear</p>
         </div>
       )}
 
@@ -226,8 +239,8 @@ export default function ChoosyPage() {
             className={`absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 transition duration-300 ease-out flex items-center justify-center text-4xl shadow-2xl
               ${isDeciding ? 'animate-pulse scale-125' : 'scale-100'}
               ${isLoser ? 'opacity-20 scale-50 grayscale' : ''}
-              ${isWinner && mode === 'individual' ? 'scale-[2.0] ring-8 ring-white z-40' : ''}
-              ${isWinner && mode === 'team' ? 'scale-150 ring-4 ring-white z-40' : ''}
+              ${isWinner && mode === 'individual' ? 'scale-[2.0] ring-4 ring-[#f4f1e8] z-40' : ''}
+              ${isWinner && mode === 'team' ? 'scale-150 ring-2 ring-[#f4f1e8] z-40' : ''}
             `}
             style={{
               left: touch.x,
@@ -238,7 +251,7 @@ export default function ChoosyPage() {
             }}
           >
             {/* Inner circle with emoji */}
-            <div className="w-full h-full rounded-full border-4 border-white/30 flex items-center justify-center drop-shadow-md">
+            <div className="w-full h-full rounded-full border-2 border-[#f4f1e8]/30 flex items-center justify-center drop-shadow-md">
                {displayData.emoji}
             </div>
           </div>

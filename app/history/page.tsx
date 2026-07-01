@@ -7,6 +7,7 @@ import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { formatFirstName } from '../../lib/cloudPlayers';
 import { db } from '../../lib/firebase';
 import { useGameState } from '../../hooks/useGameState';
+import { useAuth } from '../../hooks/useAuth';
 import {
   getWinnerIdsForRecord,
   inferHasBuiltInEndRule,
@@ -38,7 +39,8 @@ export default function HistoryPage() {
 
   // 2. Local State (Legacy Fallback)
   const [localHistory, setLocalHistory] = useGameState<GameRecord[]>('scorekeeper_history', []);
-  
+  const { user, loading: authLoading } = useAuth();
+
   // --- Filters & Toggles ---
   const [selectedGame, setSelectedGame] = useState<string>('ALL');
   const [selectedPlayer, setSelectedPlayer] = useState<string>('ALL');
@@ -49,7 +51,11 @@ export default function HistoryPage() {
   // 3. Fetch from Firestore
   useEffect(() => {
     async function fetchCloudHistory() {
-      if (!db) {
+      if (authLoading) {
+        return;
+      }
+
+      if (!db || !user) {
         setCloudHistory([]);
         setLoading(false);
         return;
@@ -66,7 +72,7 @@ export default function HistoryPage() {
       }
     }
     fetchCloudHistory();
-  }, []);
+  }, [authLoading, user]);
 
   // 4. Merge Data Models safely
   const allHistory = useMemo(() => {

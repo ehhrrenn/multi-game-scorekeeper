@@ -66,6 +66,15 @@ body {
   }
 }
 
+.choosy-dark {
+  background-color: #111110;
+  background-image:
+    linear-gradient(rgba(244, 241, 232, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 241, 232, 0.035) 1px, transparent 1px);
+  background-size: 4px 4px, 4px 4px;
+  color: #f4f1e8;
+}
+
 @keyframes die-roll {
   0%   { transform: rotate(0deg) scale(1); }
   15%  { transform: rotate(-20deg) scale(1.12); }
