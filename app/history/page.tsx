@@ -275,43 +275,43 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen bg-slate-50 dark:bg-slate-950">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center h-screen bg-[#f6f6f2] text-[#111]">
+        <div className="h-12 w-12 border-2 border-black border-t-transparent animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-50 pb-32 transition-colors">
-      
-      <div className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm border-b border-slate-200 dark:border-slate-800">
+    <div className="min-h-screen bg-[#f6f6f2] text-[#111] pb-32 transition-colors newsprint-page">
+
+      <div className="sticky top-0 z-40 bg-[#fbfbf8]/95 backdrop-blur-md border-b border-black/20">
         <div className="max-w-screen-md mx-auto px-4 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-black">History Vault</h1>
-          <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-xs font-bold shadow-inner border border-slate-200 dark:border-slate-700">
+          <h1 className="text-2xl font-black tracking-tight [font-family:Georgia,'Times_New_Roman',serif]">History Vault</h1>
+          <span className="bg-white text-black px-3 py-1 rounded-none text-xs font-bold border border-black/20 uppercase tracking-[0.18em]">
             {allHistory.length} Total Games
           </span>
         </div>
       </div>
 
       <main className="max-w-screen-md mx-auto p-4 pt-6">
-        
+
         {/* FILTERS */}
         {allHistory.length > 0 && (
           <div className="flex gap-3 mb-6">
-            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Game</label>
-              <select value={selectedGame} onChange={(e) => setSelectedGame(e.target.value)} className="w-full bg-transparent font-semibold text-slate-800 dark:text-white outline-none appearance-none">
+            <div className="flex-1 bg-white border border-black/20 rounded-none px-3 py-2">
+              <label className="text-[10px] font-bold text-black/55 uppercase tracking-wider block mb-1">Filter by Game</label>
+              <select value={selectedGame} onChange={(e) => setSelectedGame(e.target.value)} className="w-full bg-transparent font-bold text-black outline-none appearance-none">
                 <option value="ALL">All Games</option>
                 {uniqueGames.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
 
-            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-sm focus-within:border-blue-500 transition-all">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Filter by Player</label>
-                <select 
-                  value={selectedPlayer} 
-                  onChange={e => setSelectedPlayer(e.target.value)} 
-                  className="w-full bg-transparent font-bold text-slate-700 dark:text-slate-200 focus:outline-none appearance-none"
+            <div className="flex-1 bg-white border border-black/20 rounded-none px-3 py-2">
+              <label className="text-[10px] font-bold text-black/55 uppercase tracking-wider block mb-1">Filter by Player</label>
+                <select
+                  value={selectedPlayer}
+                  onChange={e => setSelectedPlayer(e.target.value)}
+                  className="w-full bg-transparent font-bold text-black outline-none appearance-none"
                 >
                   <option value="ALL">All Players</option>
                   {/* Replace the complex avatar logic with a simple text-only fallback for the dropdown */}
@@ -325,53 +325,57 @@ export default function HistoryPage() {
           </div>
         )}
 
-        {/* COMPACTED 3-COLUMN HERO STATS */}
-        <div className="grid grid-cols-3 gap-2 mb-8">
-          
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-3 text-white shadow-md shadow-blue-500/20 flex flex-col justify-between relative overflow-hidden">
-            <div className="text-blue-100 text-[10px] font-bold uppercase tracking-wider mb-2 relative z-10">Games</div>
-            <div className="text-3xl font-black relative z-10">{heroStats.totalGames}</div>
-            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🎮</div>
-          </div>
-          
-          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-3 text-white shadow-md shadow-emerald-500/20 flex flex-col justify-between relative overflow-hidden">
-            <div className="text-emerald-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Most Wins</div>
-            {heroStats.mostWinsPlayer ? (
-               <div className="relative z-10 flex items-center gap-2 mt-1">
-                 {heroStats.mostWinsPlayer.photoURL ? (
-                    <Image src={heroStats.mostWinsPlayer.photoURL} alt="" width={24} height={24} unoptimized className="w-6 h-6 rounded-full border border-white/30 object-cover" />
-                 ) : (
-                    <span className="text-lg">{heroStats.mostWinsPlayer.emoji}</span>
-                 )}
-                 <div>
-                   <div className="font-bold truncate text-[10px] leading-tight opacity-90">{heroStats.mostWinsPlayer.name.substring(0,8)}</div>
-                   <div className="text-xl font-black leading-none">{heroStats.mostWinsPlayer.wins}</div>
-                 </div>
-               </div>
-            ) : (
-               <div className="text-xs font-medium opacity-70 relative z-10">No wins</div>
-            )}
-            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">🏆</div>
+        {/* 3-COLUMN HERO STAT PILLARS */}
+        <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-5 mb-8 grid grid-cols-3 gap-3 text-center">
+
+          <div>
+            <div className="text-2xl mb-1">✶</div>
+            <div className="font-black text-2xl text-black leading-none">{heroStats.totalGames}</div>
+            <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest mt-2">Games</div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-3 text-white shadow-md shadow-purple-500/20 flex flex-col justify-between relative overflow-hidden">
-            <div className="text-purple-100 text-[10px] font-bold uppercase tracking-wider mb-1 relative z-10">Highest %</div>
-            {heroStats.highestWinPctPlayer ? (
-               <div className="relative z-10 flex items-center gap-2 mt-1">
-                 {heroStats.highestWinPctPlayer.photoURL ? (
-                    <Image src={heroStats.highestWinPctPlayer.photoURL} alt="" width={24} height={24} unoptimized className="w-6 h-6 rounded-full border border-white/30 object-cover" />
-                 ) : (
-                    <span className="text-lg">{heroStats.highestWinPctPlayer.emoji}</span>
-                 )}
-                 <div>
-                   <div className="font-bold truncate text-[10px] leading-tight opacity-90">{heroStats.highestWinPctPlayer.name.substring(0,8)}</div>
-                   <div className="text-xl font-black leading-none">{heroStats.highestWinPctPlayer.pct}%</div>
-                 </div>
-               </div>
+          <div className="border-l border-black/10">
+            {heroStats.mostWinsPlayer ? (
+              <>
+                <div className="w-9 h-9 mx-auto mb-1 rounded-full overflow-hidden border border-black/20 bg-white flex items-center justify-center text-lg">
+                  {heroStats.mostWinsPlayer.photoURL ? (
+                    <Image src={heroStats.mostWinsPlayer.photoURL} alt="" width={36} height={36} unoptimized className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{heroStats.mostWinsPlayer.emoji}</span>
+                  )}
+                </div>
+                <div className="font-black text-2xl text-black leading-none">{heroStats.mostWinsPlayer.wins}</div>
+                <div className="text-[9px] font-bold text-black/45 truncate mt-0.5">{heroStats.mostWinsPlayer.name.substring(0,10)}</div>
+              </>
             ) : (
-               <div className="text-[10px] font-medium opacity-70 relative z-10 pr-2 leading-tight">Min {heroStats.threshold} required</div>
+              <>
+                <div className="text-2xl mb-1 opacity-30">✪</div>
+                <div className="font-black text-2xl text-black/25 leading-none">—</div>
+              </>
             )}
-            <div className="text-5xl opacity-20 absolute -right-2 -bottom-2 mix-blend-overlay">📈</div>
+            <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest mt-2">Most Wins</div>
+          </div>
+
+          <div className="border-l border-black/10">
+            {heroStats.highestWinPctPlayer ? (
+              <>
+                <div className="w-9 h-9 mx-auto mb-1 rounded-full overflow-hidden border border-black/20 bg-white flex items-center justify-center text-lg">
+                  {heroStats.highestWinPctPlayer.photoURL ? (
+                    <Image src={heroStats.highestWinPctPlayer.photoURL} alt="" width={36} height={36} unoptimized className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{heroStats.highestWinPctPlayer.emoji}</span>
+                  )}
+                </div>
+                <div className="font-black text-2xl text-black leading-none">{heroStats.highestWinPctPlayer.pct}%</div>
+                <div className="text-[9px] font-bold text-black/45 truncate mt-0.5">{heroStats.highestWinPctPlayer.name.substring(0,10)}</div>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl mb-1 opacity-30">✷</div>
+                <div className="text-[9px] font-bold text-black/40 leading-tight mt-1">Min {heroStats.threshold} required</div>
+              </>
+            )}
+            <div className="text-[9px] font-bold text-black/55 uppercase tracking-widest mt-2">Highest %</div>
           </div>
 
         </div>
@@ -380,25 +384,25 @@ export default function HistoryPage() {
         {filteredHistory.length > 0 && (
           <div className="mb-8">
             <div className="flex justify-between items-end mb-3 ml-1">
-              <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+              <h2 className="text-xs font-black text-black/55 uppercase tracking-[0.18em]">
                 {selectedPlayer === 'ALL' ? 'Top 3 Players Timeline' : 'Player Trajectory'}
               </h2>
-              
-              <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
-                <button onClick={() => setGraphMode('TOTAL')} className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${graphMode === 'TOTAL' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Wins</button>
-                <button onClick={() => setGraphMode('PERCENTAGE')} className={`px-2 py-1 rounded-md text-[10px] uppercase font-bold transition-all ${graphMode === 'PERCENTAGE' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>Win %</button>
+
+              <div className="flex border border-black/20">
+                <button onClick={() => setGraphMode('TOTAL')} className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider transition-all ${graphMode === 'TOTAL' ? 'bg-black text-white' : 'text-black/55 hover:bg-black/5'}`}>Wins</button>
+                <button onClick={() => setGraphMode('PERCENTAGE')} className={`px-3 py-1 text-[10px] uppercase font-bold tracking-wider transition-all border-l border-black/20 ${graphMode === 'PERCENTAGE' ? 'bg-black text-white' : 'text-black/55 hover:bg-black/5'}`}>Win %</button>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-              
+            <div className="bg-[#fbfbf8] p-4 border border-black/20 rounded-none overflow-hidden">
+
               {/* TIME RANGE TOGGLE */}
-              <div className="flex bg-slate-50 dark:bg-slate-950/50 p-1 rounded-lg mb-4 border border-slate-100 dark:border-slate-800 overflow-x-auto scrollbar-hide">
-                {TIME_FILTERS.map(tf => (
-                  <button 
+              <div className="flex border border-black/20 mb-4 overflow-x-auto scrollbar-hide">
+                {TIME_FILTERS.map((tf, i) => (
+                  <button
                     key={tf}
-                    onClick={() => setTimeFilter(tf)} 
-                    className={`flex-1 min-w-[40px] py-1.5 rounded-md text-[10px] font-bold transition-all ${timeFilter === tf ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-600' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    onClick={() => setTimeFilter(tf)}
+                    className={`flex-1 min-w-[44px] py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all ${i > 0 ? 'border-l border-black/20' : ''} ${timeFilter === tf ? 'bg-black text-white' : 'text-black/55 hover:bg-black/5'}`}
                   >
                     {tf === 'ALL' ? 'All Time' : tf}
                   </button>
@@ -410,15 +414,15 @@ export default function HistoryPage() {
                 {(() => {
                   const allScores = graphData.flatMap(d => d.points);
                   const max = Math.max(...allScores, graphMode === 'PERCENTAGE' ? 100 : 5);
-                  const min = 0; 
+                  const min = 0;
                   const range = max - min || 1;
                   const xStep = 400 / Math.max(graphData[0]?.points.length - 1 || 1, 1);
-                  
+
                   const labelData = graphData.map((d, i) => {
                     const finalY = 200 - ((d.points[d.points.length - 1] - min) / range) * 200;
                     return { ...d, targetY: finalY, index: i };
                   }).sort((a, b) => a.targetY - b.targetY);
-                  
+
                   for (let i = 1; i < labelData.length; i++) {
                     if (labelData[i].targetY - labelData[i - 1].targetY < 20) {
                       labelData[i].targetY = labelData[i - 1].targetY + 20;
@@ -431,19 +435,18 @@ export default function HistoryPage() {
                     <>
                       {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
                         <g key={`grid-${i}`}>
-                          <line x1="0" y1={200 - (pct * 200)} x2="400" y2={200 - (pct * 200)} stroke="#e2e8f0" strokeDasharray="4" className="dark:stroke-slate-800" />
-                          <text x="-8" y={200 - (pct * 200) + 4} fill="#94a3b8" fontSize="10" textAnchor="end" className="dark:fill-slate-600 font-bold">
+                          <line x1="0" y1={200 - (pct * 200)} x2="400" y2={200 - (pct * 200)} stroke="rgba(0,0,0,0.12)" strokeDasharray="4" />
+                          <text x="-8" y={200 - (pct * 200) + 4} fill="rgba(0,0,0,0.45)" fontSize="10" textAnchor="end" className="font-bold">
                             {Math.round(max * pct)}{graphMode === 'PERCENTAGE' ? '%' : ''}
                           </text>
                         </g>
                       ))}
-                      
+
                       {graphData.map((d, i) => (
-                        <polyline 
-                          key={`line-${d.id}`} 
-                          points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')} 
-                          fill="none" stroke={colors[i % colors.length]} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" 
-                          className="drop-shadow-sm" 
+                        <polyline
+                          key={`line-${d.id}`}
+                          points={d.points.map((val, idx) => `${idx * xStep},${200 - ((val - min) / range) * 200}`).join(' ')}
+                          fill="none" stroke={colors[i % colors.length]} strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
                         />
                       ))}
 
@@ -460,20 +463,20 @@ export default function HistoryPage() {
           </div>
         )}
 
-        <h2 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3 ml-1">
+        <h2 className="text-xs font-black text-black/55 uppercase tracking-[0.18em] mb-3 ml-1">
           Match Feed
         </h2>
-        
+
         {filteredHistory.length === 0 ? (
-          <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8 text-center text-slate-500 font-medium border border-slate-200 dark:border-slate-700 border-dashed">
+          <div className="bg-[#fbfbf8] rounded-none p-8 text-center text-black/55 font-medium border border-black/20 border-dashed">
             {allHistory.length === 0 ? 'No games found in the vault.' : 'No games found for this filter combination.'}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filteredHistory.map((game, index) => (
-              <GameCard 
+              <GameCard
                 key={`${game.gameId}-${index}`}
-                game={game} 
+                game={game}
                 winnerIds={getWinnerIds(game)}
                 isComplete={isGameCompleted(game)}
                 canFinish={!inferHasBuiltInEndRule(game) && !isGameCompleted(game)}
