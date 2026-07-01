@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import BottomNav from '../components/BottomNav';
 import { db } from '../../lib/firebase';
+import { useAuth } from '../../hooks/useAuth';
 import {
   readLocalSharedNotes,
   saveSharedNotes,
@@ -15,9 +16,16 @@ export default function NotesPage() {
   const [notes, setNotes] = useState<SharedNoteItem[]>(() => (db ? [] : readLocalSharedNotes()));
   const [newNote, setNewNote] = useState('');
   const [loading, setLoading] = useState(Boolean(db));
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    if (!db) {
+    if (authLoading) {
+      return;
+    }
+
+    if (!db || !user) {
+      setNotes(readLocalSharedNotes());
+      setLoading(false);
       return;
     }
 
@@ -36,7 +44,7 @@ export default function NotesPage() {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [authLoading, user]);
 
   const remainingCount = useMemo(() => notes.filter((note) => !note.checked).length, [notes]);
 

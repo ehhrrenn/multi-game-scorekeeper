@@ -3,7 +3,7 @@
 
 import Image from 'next/image';
 import { auth, db, firebaseConfigError, isFirebaseConfigured } from '../../lib/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, type AuthError } from 'firebase/auth';
 import { formatFirstName, upsertCloudPlayer } from '../../lib/cloudPlayers';
 import { useAuth } from '../../hooks/useAuth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -27,10 +27,11 @@ export default function AuthButton() {
   }
 
   const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+
     try {
-      const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(safeAuth, provider);
-      
+
       if (result.user) {
         const existingRef = doc(safeDb, 'users', result.user.uid);
         const existingSnap = await getDoc(existingRef);
@@ -49,7 +50,21 @@ export default function AuthButton() {
         });
       }
     } catch (error) {
-      console.error("Google Login failed:", error);
+      const code = (error as AuthError)?.code;
+      const popupUnavailable = code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment';
+
+      if (popupUnavailable) {
+        try {
+          await signInWithRedirect(safeAuth, provider);
+        } catch (redirectError) {
+          console.error("Google Login redirect fallback failed:", redirectError);
+        }
+        return;
+      }
+
+      if (code !== 'auth/cancelled-popup-request' && code !== 'auth/popup-closed-by-user') {
+        console.error("Google Login failed:", error);
+      }
     }
   };
 
