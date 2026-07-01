@@ -24,7 +24,7 @@ export default function PlayerProfilePage() {
   const playerId = decodeURIComponent(params.playerId as string);
   
   // Auth & Admin Check
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, loading: authLoading } = useAuth();
   const isAdmin = currentUser?.uid === process.env.NEXT_PUBLIC_ADMIN_UID;
 
   // 1. Data State (Cloud + Local)
@@ -53,10 +53,14 @@ export default function PlayerProfilePage() {
   const [targetMergeId, setTargetMergeId] = useState<string>('');
   const [isMerging, setIsMerging] = useState(false);
 
-  // 3. Fetch Cloud Data
+  // 3. Fetch Cloud Data (once auth state is known)
   useEffect(() => {
     async function fetchCloudProfile() {
-      if (!db) {
+      if (authLoading) {
+        return;
+      }
+
+      if (!db || !currentUser) {
         setCloudPlayer(null);
         setCloudHistory([]);
         setLoading(false);
@@ -79,7 +83,7 @@ export default function PlayerProfilePage() {
       }
     }
     fetchCloudProfile();
-  }, [playerId]);
+  }, [playerId, authLoading, currentUser]);
 
   // 4. Merge Data Models
   const player = useMemo(() => {
@@ -331,7 +335,7 @@ const handleDelete = async () => {
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-black/60 animate-in fade-in" onClick={() => setShowDeleteConfirm(false)} />
-          <div className="relative w-full max-w-sm bg-[#f7f5ee] border-[3px] border-black rounded-none p-8 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm bg-[#f7f5ee] border border-black/20 rounded-none p-8 animate-in zoom-in-95 duration-200">
             <div className="text-4xl text-center mb-4">✕</div>
             <h3 className="text-2xl font-black mb-2 text-[#111] text-center uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Delete Player?</h3>
             <p className="text-black/70 text-center mb-8 leading-relaxed font-semibold">
@@ -353,7 +357,7 @@ const handleDelete = async () => {
       {showMergeModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-black/60 animate-in fade-in" onClick={() => !isMerging && setShowMergeModal(false)} />
-          <div className="relative w-full max-w-sm bg-[#f7f5ee] border-[3px] border-black rounded-none p-6 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm bg-[#f7f5ee] border border-black/20 rounded-none p-6 animate-in zoom-in-95 duration-200">
             <h3 className="text-xl font-black mb-2 text-[#111] uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Admin Merge</h3>
             <p className="text-sm text-black/70 mb-6 leading-relaxed font-semibold">
               Move all of <b>{player.isCloudUser ? formatFirstName(player.name) : player.name}&apos;s</b> history into a synced Cloud Account. This cannot be undone.
@@ -387,7 +391,7 @@ const handleDelete = async () => {
       )}
 
       {/* Sticky Header */}
-      <div className="fixed top-0 left-0 right-0 h-16 bg-[#fbfbf8]/95 backdrop-blur-md border-b-2 border-black/25 shadow-[0_4px_0_0_rgba(0,0,0,0.08)] z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
+      <div className="fixed top-0 left-0 right-0 h-16 bg-[#fbfbf8]/95 backdrop-blur-md border-b border-black/20 z-40 flex items-center justify-between px-4 max-w-screen-md mx-auto">
         <h1 className="text-xl font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Player Profile</h1>
         <div className="flex gap-2">
           {/* Admin Context Menu */}
@@ -400,7 +404,7 @@ const handleDelete = async () => {
           {isEditing ? (
             <>
               <button onClick={() => setIsEditing(false)} className="px-3 py-1.5 text-sm font-bold text-black/60 bg-white border border-black/20 rounded-none uppercase tracking-[0.08em]">Cancel</button>
-              <button onClick={handleSave} className="px-4 py-1.5 text-sm font-bold text-white bg-black rounded-none shadow-sm uppercase tracking-[0.08em]">Save</button>
+              <button onClick={handleSave} className="px-4 py-1.5 text-sm font-bold text-white bg-black rounded-none uppercase tracking-[0.08em]">Save</button>
             </>
           ) : (
             <>
@@ -428,9 +432,9 @@ const handleDelete = async () => {
         )}
 
         {/* Hero Dossier Card */}
-        <div className="bg-[#f7f5ee] p-6 rounded-none border-[3px] border-black relative overflow-hidden mb-8 shadow-[8px_8px_0_0_rgba(0,0,0,0.9)]">
+        <div className="bg-[#f7f5ee] p-6 rounded-none border border-black/20 relative overflow-hidden mb-8">
           {player.isCloudUser && (
-            <div className="absolute top-0 right-0 bg-black text-white text-[10px] font-bold px-3 py-1 rounded-none z-10 shadow-sm uppercase tracking-[0.16em]">
+            <div className="absolute top-0 right-0 bg-black text-white text-[10px] font-bold px-3 py-1 rounded-none z-10 uppercase tracking-[0.16em]">
               CLOUD SYNCED
             </div>
           )}
@@ -443,19 +447,19 @@ const handleDelete = async () => {
             {isEditing ? (
               <button 
                 onClick={() => setShowEmojiPicker(true)}
-                className="w-20 h-20 shrink-0 bg-white border-2 border-black border-dashed rounded-none flex items-center justify-center text-4xl active:translate-y-px transition shadow-inner relative"
+                className="w-20 h-20 shrink-0 bg-white border border-black/20 border-dashed rounded-none flex items-center justify-center text-4xl active:translate-y-px transition relative"
               >
                 {(!editUseCustomEmoji && player.photoURL) ? (
-                  <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border-2 border-black shadow-sm object-cover" />
+                  <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border border-black/20 object-cover" />
                 ) : (
                   <>{editEmoji || '☞'}</>
                 )}
               </button>
             ) : (
               player.photoURL && !player.useCustomEmoji ? (
-                <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border-2 border-black shadow-sm object-cover" />
+                <Image src={player.photoURL} alt={player.name} width={80} height={80} unoptimized className="w-20 h-20 rounded-none border border-black/20 object-cover" />
               ) : (
-                <div className="w-20 h-20 shrink-0 bg-white border border-black/20 rounded-none flex items-center justify-center text-4xl shadow-sm">
+                <div className="w-20 h-20 shrink-0 bg-white border border-black/20 rounded-none flex items-center justify-center text-4xl">
                   {player.emoji || '✤'}
                 </div>
               )
@@ -476,7 +480,7 @@ const handleDelete = async () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mt-6 border-t-2 border-black pt-6">
+          <div className="grid grid-cols-3 gap-3 mt-6 border-t border-black/20 pt-6">
              <div className="text-center">
                 <div className="text-2xl mb-1">✶</div>
                 <div className="font-black text-xl text-black">{stats.gamesPlayed}</div>
@@ -497,7 +501,7 @@ const handleDelete = async () => {
 
         {/* Dynamic SVG Score Graph */}
         {stats.graphData.length > 1 && (
-          <div className="bg-[#f7f5ee] p-5 rounded-none border-[3px] border-black shadow-[8px_8px_0_0_rgba(0,0,0,0.9)] mb-8">
+          <div className="bg-[#f7f5ee] p-5 rounded-none border border-black/20 mb-8">
             <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
               <rect x="0" y="0" width={width} height={height} fill="none" stroke="rgba(0,0,0,0.85)" strokeWidth="2" />
               <line x1={graphPadding} y1={height - graphPadding} x2={width - graphPadding} y2={height - graphPadding} stroke="rgba(0,0,0,0.35)" strokeWidth="1.5" />
@@ -513,7 +517,6 @@ const handleDelete = async () => {
                 strokeWidth="3.5" 
                 strokeLinecap="square" 
                 strokeLinejoin="miter" 
-                className="drop-shadow-sm" 
               />
             </svg>
           </div>
@@ -528,7 +531,7 @@ const handleDelete = async () => {
         
         <div className="grid gap-3 pb-8">
           {filteredGames.length === 0 ? (
-            <div className="text-center p-6 text-black/55 font-medium border-2 border-dashed border-black/20 rounded-none bg-[#fbfbf8]">
+            <div className="text-center p-6 text-black/55 font-medium border border-dashed border-black/20 rounded-none bg-[#fbfbf8]">
               No games match this filter.
             </div>
           ) : (
@@ -552,7 +555,7 @@ const handleDelete = async () => {
       {/* Emoji Picker Modal */}
             {showEmojiPicker && (
               <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-6 animate-in fade-in">
-                <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-6 shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
+                <div className="bg-[#fbfbf8] border border-black/20 rounded-none p-6 w-full max-w-sm animate-in zoom-in-95 duration-200">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-black text-[#111]">Choose Emoji</h3>
                     <button onClick={() => setShowEmojiPicker(false)} className="w-8 h-8 flex items-center justify-center bg-white border border-black/20 rounded-none text-black/70 hover:text-black active:scale-95 transition-all">✕</button>
