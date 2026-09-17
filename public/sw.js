@@ -25,7 +25,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_VERSION)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      // Add each URL individually (instead of cache.addAll, which aborts
+      // the whole precache if any single request fails) so one bad asset
+      // can't prevent the offline fallback page from being cached.
+      .then((cache) =>
+        Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(url)))
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -73,7 +78,15 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(async () => {
           const cached = await caches.match(request);
-          return cached || (await caches.match(OFFLINE_URL));
+          if (cached) return cached;
+          const offline = await caches.match(OFFLINE_URL);
+          if (offline) return offline;
+          // Last resort: never let respondWith() resolve to undefined,
+          // which browsers surface as an opaque "page couldn't load" error.
+          return new Response('You are offline and this page has not been cached yet.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain' },
+          });
         })
     );
     return;
@@ -92,7 +105,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => cached);
+        .catch(() => cached || Response.error());
     })
   );
 });
