@@ -2,20 +2,23 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import BottomNav from './components/BottomNav';
-import AuthButton from './components/AuthButton';
+import ServiceWorkerRegister from './components/ServiceWorkerRegister';
 
 export const metadata: Metadata = {
   title: 'Scorekeeper Pro',
   description: 'Scores Kept. Scores Settled.',
+  appleWebApp: {
+    title: 'Scorekeeper',
+    statusBarStyle: 'black-translucent',
+  },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  viewportFit: 'cover'
+  viewportFit: 'cover',
+  themeColor: '#111111',
 };
-
-<AuthButton />
 
 export default function RootLayout({
   children,
@@ -27,6 +30,7 @@ export default function RootLayout({
       <body className="bg-slate-50 dark:bg-slate-950 transition-colors antialiased">
         {children}
         <BottomNav />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
