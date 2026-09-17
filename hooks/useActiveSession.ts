@@ -1,7 +1,7 @@
 // hooks/useActiveSession.ts
 import { useCallback, useEffect, useState } from 'react';
 
-export type GameType = 'custom' | 'yahtzee' | 'farkle' | null;
+export type GameType = 'custom' | 'yahtzee' | 'farkle' | 'catan' | null;
 
 export interface ActiveSession {
   sessionId: string;

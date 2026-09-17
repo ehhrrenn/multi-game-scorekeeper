@@ -9,7 +9,7 @@ import { useActiveSession } from '../hooks/useActiveSession';
 import { clearStoredGameState } from '../lib/activeGameState';
 import { db } from '../lib/firebase';
 import { DEFAULT_GAME_PROFILE } from '../lib/gameProfiles';
-import { buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, type GameRecord } from '../lib/gameHistory';
+import { buildCatanGameRecord, buildCustomGameRecord, buildFarkleGameRecord, buildYahtzeeGameRecord, saveGameRecordToCloud, upsertGameRecord, CATAN_ISLAND1_NAME, CATAN_ISLAND2_NAME, type GameRecord } from '../lib/gameHistory';
 import AuthButton from './components/AuthButton';
 
 // --- Types ---
@@ -61,7 +61,7 @@ export default function Home() {
   const hasAnyActiveGame = !!(activeSession?.gameType) || gameInProgress;
 
   const recentGames = useMemo(() => {
-    const classicGameNames = new Set(['Yahtzee', 'Triple Yahtzee', 'Farkle']);
+    const classicGameNames = new Set(['Yahtzee', 'Triple Yahtzee', 'Farkle', 'Farkle Stealing', CATAN_ISLAND1_NAME, CATAN_ISLAND2_NAME]);
     const customProfileNames = new Set(gameProfiles.map((profile) => profile.name));
     const uniqueGames = new Set<string>();
     matchHistory.forEach(match => {
@@ -83,10 +83,11 @@ export default function Home() {
     return activeProfile.scoreDirection === 'DOWN' ? settings.target - sum : sum;
   };
 
-  const routeToGameType = (route: string): 'custom' | 'yahtzee' | 'farkle' | null => {
+  const routeToGameType = (route: string): 'custom' | 'yahtzee' | 'farkle' | 'catan' | null => {
     if (route === '/custom') return 'custom';
     if (route === '/yahtzee') return 'yahtzee';
     if (route === '/farkle') return 'farkle';
+    if (route === '/catan') return 'catan';
     return null;
   };
 
@@ -162,6 +163,8 @@ export default function Home() {
         gameRecord = buildYahtzeeGameRecord(activeSession.gameState, newId);
       } else if (activeSession.gameType === 'farkle') {
         gameRecord = buildFarkleGameRecord(activeSession.gameState, newId);
+      } else if (activeSession.gameType === 'catan') {
+        gameRecord = buildCatanGameRecord(activeSession.gameState, newId);
       }
       if (gameRecord) {
         setGameHistory(prev => upsertGameRecord(prev, gameRecord!));
@@ -252,7 +255,7 @@ export default function Home() {
                 <h3 className="text-3xl font-black mb-3 text-[#111] text-center uppercase tracking-[0.04em] [font-family:Georgia,'Times_New_Roman',serif]">Active Game Found</h3>
                 <p className="text-black/75 text-center mb-7 leading-relaxed font-semibold">
                 {activeSession?.gameType
-                  ? `A ${activeSession.gameType === 'custom' ? 'Custom Game' : activeSession.gameType === 'yahtzee' ? 'Yahtzee' : 'Farkle'} game is already in progress. Save it first, or discard it to start fresh.`
+                  ? `A ${activeSession.gameType === 'custom' ? 'Custom Game' : activeSession.gameType === 'yahtzee' ? 'Yahtzee' : activeSession.gameType === 'farkle' ? 'Farkle' : 'Catan Dice Game'} game is already in progress. Save it first, or discard it to start fresh.`
                   : 'A game is already in progress. Save it first, or discard it to start fresh.'}
                 </p>
                 <div className="flex flex-col gap-2 border-t-2 border-b-2 border-black py-3">
@@ -350,6 +353,19 @@ export default function Home() {
               <div>
                 <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Farkle</h3>
                 <p className="text-xs font-bold text-black/50">Regular & stealing modes</p>
+              </div>
+            </div>
+            <div className="text-black/35 text-xl font-bold group-hover:text-black transition-colors">▸</div>
+          </button>
+
+          <button onClick={() => handleClassicGameSelect('/catan')} className="w-full text-left bg-[#fbfbf8] border border-black/20 p-5 flex items-center justify-between hover:border-black active:scale-[0.98] transition-all cursor-pointer group">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-sm border border-black/20 group-hover:scale-110 transition-transform">
+                ⬢
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-[#111] [font-family:Georgia,'Times_New_Roman',serif]">Catan Dice Game</h3>
+                <p className="text-xs font-bold text-black/50">Island One & Island Two boards</p>
               </div>
             </div>
             <div className="text-black/35 text-xl font-bold group-hover:text-black transition-colors">▸</div>

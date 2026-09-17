@@ -30,5 +30,17 @@ export function clearStoredGameState(gameType: GameType): void {
     window.localStorage.removeItem('farkle_current_player');
     window.localStorage.removeItem('farkle_phase');
     window.localStorage.removeItem('scorekeeper_active_game_id');
+    return;
+  }
+
+  if (gameType === 'catan') {
+    window.localStorage.removeItem('catan_players');
+    window.localStorage.removeItem('catan_scores');
+    window.localStorage.removeItem('catan_board');
+    window.localStorage.removeItem('catan_round_index');
+    window.localStorage.removeItem('catan_player_index');
+    window.localStorage.removeItem('catan_phase');
+    window.localStorage.removeItem('catan_has_celebrated');
+    window.localStorage.removeItem('scorekeeper_active_game_id');
   }
 }

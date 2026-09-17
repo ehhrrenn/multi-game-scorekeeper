@@ -1,4 +1,16 @@
 import { deleteDoc, doc, setDoc, type Firestore } from 'firebase/firestore';
+import {
+  computeCatanTotals,
+  ISLAND1_TURN_LIMIT,
+  ISLAND2_TARGET_VP,
+  type CatanBoard,
+  type CatanScoreMap,
+} from './catanScoring';
+
+export type { CatanResourceId, CatanBuildState, CatanBoard, CatanScoreMap } from './catanScoring';
+
+export const CATAN_ISLAND1_NAME = 'Catan Dice Game — Island One';
+export const CATAN_ISLAND2_NAME = 'Catan Dice Game — Island Two';
 
 export type PlayerSnapshot = {
   id: string;
@@ -31,6 +43,10 @@ export type GameRecord = {
   farkleScores?: FarkleScoreMap;
   farkleMode?: FarkleMode;
   farkleSettings?: FarkleSettings;
+  catanScores?: CatanScoreMap;
+  catanBoard?: CatanBoard;
+  catanRoundIndex?: number;
+  catanPlayerIndex?: number;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
   winCondition?: 'HIGH' | 'LOW';
@@ -72,6 +88,15 @@ type FarkleSessionState = {
   activeGameId?: string | null;
 };
 
+type CatanSessionState = {
+  players: PlayerSnapshot[];
+  scores: CatanScoreMap;
+  board: CatanBoard;
+  roundIndex: number;
+  playerIndex: number;
+  activeGameId?: string | null;
+};
+
 const UPPER_CATEGORY_IDS = ['ones', 'twos', 'threes', 'fours', 'fives', 'sixes'];
 const LOWER_CATEGORY_IDS = ['3kind', '4kind', 'fullHouse', 'smStraight', 'lgStraight', 'yahtzee', 'chance', 'bonus'];
 
@@ -81,6 +106,10 @@ function isYahtzeeRecord(record: GameRecordLike): boolean {
 
 function isFarkleRecord(record: GameRecordLike): boolean {
   return Boolean(record.farkleScores) || record.gameName === 'Farkle' || record.gameName === 'Farkle Stealing';
+}
+
+function isCatanRecord(record: GameRecordLike): boolean {
+  return Boolean(record.catanScores) || record.gameName === CATAN_ISLAND1_NAME || record.gameName === CATAN_ISLAND2_NAME;
 }
 
 function countCompletedRounds(rounds: Round[], playerIds: string[]): number {
@@ -135,7 +164,7 @@ export function inferHasBuiltInEndRule(record: GameRecordLike): boolean {
     return record.hasBuiltInEndRule;
   }
 
-  if (isYahtzeeRecord(record) || isFarkleRecord(record)) {
+  if (isYahtzeeRecord(record) || isFarkleRecord(record) || isCatanRecord(record)) {
     return true;
   }
 
@@ -188,6 +217,14 @@ export function isGameCompleted(record: GameRecordLike): boolean {
 
     const reachedRoundIndex = getTargetReachedRoundIndex(rounds, playerIds, targetScore);
     return reachedRoundIndex !== null && completedRounds >= reachedRoundIndex + 1;
+  }
+
+  if (isCatanRecord(record)) {
+    const board = record.catanBoard || 'island1';
+    if (board === 'island2') {
+      return Object.values(record.finalScores || {}).some((vp) => vp >= ISLAND2_TARGET_VP);
+    }
+    return (record.catanRoundIndex || 0) >= ISLAND1_TURN_LIMIT;
   }
 
   // Check for round limit first (custom games with roundLimit mode)
@@ -600,6 +637,51 @@ export function buildFarkleGameRecord(state: FarkleSessionState, gameId?: string
         : targetReachedAndFinishedRound
           ? 'TARGET_REACHED'
           : undefined
+    )
+  });
+}
+
+export function buildCatanGameRecord(state: CatanSessionState, gameId?: string, options?: BuildGameRecordOptions): GameRecord | null {
+  if (!state.players.length || !Object.keys(state.scores).length) {
+    return null;
+  }
+
+  const playerIds = state.players.map((player) => player.id);
+  const finalScores = computeCatanTotals(state.scores, state.board, playerIds);
+  const isIsland2 = state.board === 'island2';
+
+  const baseRecord: GameRecord = {
+    gameId: gameId || state.activeGameId || `game_${Date.now()}`,
+    date: new Date().toISOString(),
+    gameName: isIsland2 ? CATAN_ISLAND2_NAME : CATAN_ISLAND1_NAME,
+    finalScores,
+    activePlayerIds: playerIds,
+    catanScores: JSON.parse(JSON.stringify(state.scores)),
+    catanBoard: state.board,
+    catanRoundIndex: state.roundIndex,
+    catanPlayerIndex: state.playerIndex,
+    playerSnapshots: state.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      emoji: player.emoji,
+      photoURL: player.photoURL,
+      isCloudUser: player.isCloudUser,
+      useCustomEmoji: player.useCustomEmoji
+    })),
+    settings: isIsland2
+      ? { target: ISLAND2_TARGET_VP, scoreDirection: 'UP', endMode: 'TARGET' }
+      : { target: 0, scoreDirection: 'UP', endMode: 'ROUNDS', roundLimit: ISLAND1_TURN_LIMIT },
+    winCondition: 'HIGH'
+  };
+
+  const isComplete = isIsland2
+    ? Object.values(finalScores).some((vp) => vp >= ISLAND2_TARGET_VP)
+    : state.roundIndex >= ISLAND1_TURN_LIMIT;
+
+  return withGameLifecycle(baseRecord, {
+    markCompleted: options?.markCompleted ?? isComplete,
+    completedReason: options?.completedReason ?? (
+      isComplete ? (isIsland2 ? 'TARGET_REACHED' : 'ROUND_LIMIT_REACHED') : undefined
     )
   });
 }

@@ -1,5 +1,5 @@
 import { collection, doc, getDocs, setDoc, type Firestore } from 'firebase/firestore';
-import type { GameRecord } from './gameHistory';
+import { CATAN_ISLAND1_NAME, CATAN_ISLAND2_NAME, type GameRecord } from './gameHistory';
 
 export type WinCondition = 'HIGH' | 'LOW';
 export type ScoreDirection = 'UP' | 'DOWN';
@@ -16,7 +16,7 @@ export type GameProfile = {
   lastModified: string;
 };
 
-const BUILT_IN_GAMES = new Set(['Custom Game', 'Yahtzee', 'Triple Yahtzee', 'Farkle', 'Farkle Stealing']);
+const BUILT_IN_GAMES = new Set(['Custom Game', 'Yahtzee', 'Triple Yahtzee', 'Farkle', 'Farkle Stealing', CATAN_ISLAND1_NAME, CATAN_ISLAND2_NAME]);
 
 function nowIso(): string {
   return new Date().toISOString();

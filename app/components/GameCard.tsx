@@ -5,7 +5,8 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { formatFirstName } from '../../lib/cloudPlayers';
-import { buildYahtzeeGraphSeries, type YahtzeeScoreEntry } from '../../lib/gameHistory';
+import { buildYahtzeeGraphSeries, CATAN_ISLAND1_NAME, CATAN_ISLAND2_NAME, type YahtzeeScoreEntry } from '../../lib/gameHistory';
+import type { CatanBoard, CatanScoreMap } from '../../lib/catanScoring';
 
 // --- Types ---
 type PlayerSnapshot = {
@@ -36,6 +37,10 @@ export type GameRecord = {
   farkleScores?: FarkleScoreMap;
   farkleMode?: FarkleMode;
   farkleSettings?: FarkleSettings;
+  catanScores?: CatanScoreMap;
+  catanBoard?: CatanBoard;
+  catanRoundIndex?: number;
+  catanPlayerIndex?: number;
   playerSnapshots: PlayerSnapshot[];
   settings?: GameSettings;
   winCondition?: 'HIGH' | 'LOW';
@@ -99,6 +104,7 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
     e.stopPropagation();
     const isYahtzeeGame = game.gameName === 'Yahtzee' || game.gameName === 'Triple Yahtzee' || Boolean(game.yahtzeeScores);
     const isFarkleGame = game.gameName === 'Farkle' || game.gameName === 'Farkle Stealing' || Boolean(game.farkleScores) || Boolean(game.farkleMode);
+    const isCatanGame = game.gameName === CATAN_ISLAND1_NAME || game.gameName === CATAN_ISLAND2_NAME || Boolean(game.catanScores);
 
     window.localStorage.setItem('scorekeeper_active_game_id', game.gameId);
 
@@ -131,6 +137,21 @@ export default function GameCard({ game, winnerIds, isComplete, canFinish, isExp
       window.localStorage.setItem('farkle_current_round', JSON.stringify(currentRoundIndex));
       window.localStorage.setItem('farkle_current_player', JSON.stringify(0));
       router.push('/farkle');
+      return;
+    }
+
+    if (isCatanGame) {
+      const catanPlayers = game.activePlayerIds
+        .map((id) => game.playerSnapshots.find((player) => player.id === id))
+        .filter((player): player is PlayerSnapshot => Boolean(player));
+
+      window.localStorage.setItem('catan_players', JSON.stringify(catanPlayers));
+      window.localStorage.setItem('catan_scores', JSON.stringify(game.catanScores || {}));
+      window.localStorage.setItem('catan_board', JSON.stringify(game.catanBoard || 'island1'));
+      window.localStorage.setItem('catan_round_index', JSON.stringify(game.catanRoundIndex || 0));
+      window.localStorage.setItem('catan_player_index', JSON.stringify(game.catanPlayerIndex || 0));
+      window.localStorage.setItem('catan_phase', JSON.stringify('PLAYING'));
+      router.push('/catan');
       return;
     }
 
